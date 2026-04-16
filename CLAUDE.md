@@ -83,42 +83,23 @@ Discovers skills from GitHub repos via Trees API. Sources configured in `DATA_DI
 
 This project maintains a live knowledge graph at `graphify-out/`. It maps all code, assets, and documentation into a navigable graph with community detection and relationship tracking.
 
-### Always consult the graph first
+### MANDATORY: Always consult the graph for context
 
-Before answering architecture, structure, or "how does X connect to Y" questions:
+**Before ANY code modification or architecture question, you MUST:**
 1. Read `graphify-out/GRAPH_REPORT.md` — god nodes, communities, surprising connections
 2. Use `/graphify query "<question>"` for cross-cutting questions that span multiple files
 3. Use `/graphify path "ConceptA" "ConceptB"` to trace dependency chains
 4. Use `/graphify explain "NodeName"` to understand a single concept's connections
 
-### Keep the graph and vault current
+The graph gives you the full picture of how the codebase is connected. Use it to avoid blind edits.
 
-The graph and Obsidian vault auto-update on git commits and branch switches via post-commit/post-checkout hooks (code-only, no LLM needed).
+### Graph auto-updates — don't rebuild manually
 
-After modifying **code files** within a session (without committing yet), run:
-```bash
-python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
-python graphify-out/rebuild-vault.py
-```
-
-After creating or modifying **non-code files** (docs, images, configs), run:
-```
-/graphify --update
-```
-Then regenerate the vault: `python graphify-out/rebuild-vault.py`
-
-### When to rebuild fully
-
-Run `/graphify` (full pipeline) followed by `/graphify` with `--obsidian` when:
-- Major refactors that change the architecture
-- New features spanning multiple files
-- The graph feels stale or incomplete (check `graphify-out/GRAPH_REPORT.md` "Knowledge Gaps" section)
+Git hooks (post-commit, post-checkout) handle graph rebuilds automatically. You do NOT need to run rebuild commands. Just commit your changes and the graph updates itself.
 
 ### Graph outputs
 
+- `graphify-out/GRAPH_REPORT.md` — audit report with god nodes, communities, gaps
 - `graphify-out/graph.html` — interactive visualization (open in browser)
 - `graphify-out/graph.json` — raw graph data
-- `graphify-out/GRAPH_REPORT.md` — audit report with god nodes, communities, gaps
 - `graphify-out/obsidian/` — Obsidian vault (open as vault, use Graph View for visual navigation)
-- `graphify-out/obsidian/graph.canvas` — Obsidian Canvas with communities as groups
-- `graphify-out/rebuild-vault.py` — script to regenerate vault from current graph.json

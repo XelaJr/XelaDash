@@ -34,35 +34,6 @@ function ensureDataDir() {
 }
 ensureDataDir();
 
-// ─── Claude Code permissions (auto-allow notes/todos writes) ──────────────────
-const XELADASH_PERMISSIONS = [
-    `Write(${tildePrefix(path.join(DATA_DIR, 'notes', '*'))})`,
-    `Write(${tildePrefix(path.join(DATA_DIR, 'todos', '*'))})`,
-];
-
-function ensureClaudePermissions() {
-    try {
-        let settings = {};
-        if (fs.existsSync(CLAUDE_SETTINGS_PATH)) {
-            try {
-                settings = JSON.parse(fs.readFileSync(CLAUDE_SETTINGS_PATH, 'utf8'));
-            } catch {
-                /* corrupt, overwrite */ }
-        }
-        if (!settings.permissions) settings.permissions = {};
-        if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
-
-        const before = settings.permissions.allow.length;
-        for (const perm of XELADASH_PERMISSIONS) {
-            if (!settings.permissions.allow.includes(perm)) settings.permissions.allow.push(perm);
-        }
-        if (settings.permissions.allow.length !== before) {
-            fs.writeFileSync(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n');
-        }
-    } catch {
-        /* never crash the server over this */ }
-}
-ensureClaudePermissions();
 
 // Load .env manually (no dotenv dependency)
 try {
@@ -1853,6 +1824,248 @@ app.get('/api/costs', async (req, res) => {
     costsCache = result;
     costsCacheTime = Date.now();
     res.json(result);
+});
+
+// ─── Usage Windows ───────────────────────────────────────────────────────────
+
+async function extractSessionUsageByTime(filePath) {
+    const entries = [];
+    const rl = readline.createInterface({
+        input: fs.createReadStream(filePath),
+        crlfDelay: Infinity
+    });
+    for await (const line of rl) {
+        if (!line.includes('"assistant"')) continue;
+        try {
+            const obj = JSON.parse(line);
+            if (obj.type !== 'assistant') continue;
+            const u = obj.message?.usage;
+            if (!u) continue;
+            const timestamp = obj.timestamp || null;
+            if (!timestamp) continue;
+            entries.push({
+                timestamp,
+                tokens: {
+                    input: u.input_tokens || 0,
+                    output: u.output_tokens || 0,
+                    cacheRead: u.cache_read_input_tokens || 0,
+                    cacheCreate: u.cache_creation_input_tokens || 0
+                },
+                model: obj.message?.model || obj.message?.message?.model || null
+            });
+        } catch {}
+    }
+    return entries;
+}
+
+let usageWindowsCache = null;
+let usageWindowsCacheTime = 0;
+
+app.get('/api/usage-windows', async (req, res) => {
+    try {
+        if (usageWindowsCache && Date.now() - usageWindowsCacheTime < 120_000) {
+            return res.json(usageWindowsCache);
+        }
+
+        const now = new Date();
+        const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+        // 1. Gather all session entries from the last 14 days
+        const dirs = getProjectDirs();
+        const allEntries = (await Promise.all(dirs.map(d => loadSessionIndex(d)))).flat();
+        const recentEntries = allEntries.filter(e => {
+            const mod = e.modified || e.created;
+            if (!mod) return false;
+            return new Date(mod) >= fourteenDaysAgo;
+        });
+
+        // 2. Extract timestamped usage from each session
+        const allUsage = [];
+        const sessionTimestamps = new Map(); // sessionId -> Set of window keys (for counting unique sessions)
+        await Promise.all(recentEntries.map(async entry => {
+            const filePath = entry.fullPath || path.join(PROJECTS_DIR, entry.projectDir, `${entry.sessionId}.jsonl`);
+            if (!fs.existsSync(filePath)) return;
+            try {
+                const usageEntries = await extractSessionUsageByTime(filePath);
+                for (const u of usageEntries) {
+                    allUsage.push({ ...u, sessionId: entry.sessionId });
+                }
+            } catch {}
+        }));
+
+        // Sort by timestamp
+        allUsage.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        // 3. Build 5-hour windows going back 7 days
+        const WINDOW_MS = 5 * 60 * 60 * 1000;
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        // Align window start to midnight of 7 days ago
+        const windowsStart = new Date(sevenDaysAgo);
+        windowsStart.setHours(0, 0, 0, 0);
+
+        const windows = [];
+        let wStart = new Date(windowsStart);
+        while (wStart < now) {
+            const wEnd = new Date(wStart.getTime() + WINDOW_MS);
+            windows.push({
+                start: wStart.toISOString(),
+                end: wEnd.toISOString(),
+                tokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
+                cost: 0,
+                sessions: new Set()
+            });
+            wStart = wEnd;
+        }
+
+        // 4. Build weekly buckets (Monday-to-Sunday), last 5 weeks
+        function getMonday(d) {
+            const dt = new Date(d);
+            dt.setHours(0, 0, 0, 0);
+            const day = dt.getDay();
+            const diff = day === 0 ? -6 : 1 - day; // Monday is day 1
+            dt.setDate(dt.getDate() + diff);
+            return dt;
+        }
+
+        const currentMonday = getMonday(now);
+        const weeks = [];
+        for (let i = 4; i >= 0; i--) {
+            const wkStart = new Date(currentMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+            const wkEnd = new Date(wkStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+            weeks.push({
+                start: wkStart.toISOString(),
+                end: wkEnd.toISOString(),
+                tokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
+                cost: 0,
+                sessions: new Set()
+            });
+        }
+
+        // 5. Today bucket
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+        const today = {
+            tokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
+            cost: 0,
+            sessions: new Set()
+        };
+
+        // 6. Distribute usage entries into buckets
+        for (const entry of allUsage) {
+            const ts = new Date(entry.timestamp);
+            const entryCost = calculateCost(entry.tokens, entry.model);
+
+            // 5-hour windows
+            for (const w of windows) {
+                if (ts >= new Date(w.start) && ts < new Date(w.end)) {
+                    w.tokens.input += entry.tokens.input;
+                    w.tokens.output += entry.tokens.output;
+                    w.tokens.cacheRead += entry.tokens.cacheRead;
+                    w.tokens.cacheCreate += entry.tokens.cacheCreate;
+                    w.cost += entryCost;
+                    w.sessions.add(entry.sessionId);
+                    break;
+                }
+            }
+
+            // Weekly buckets
+            for (const wk of weeks) {
+                if (ts >= new Date(wk.start) && ts < new Date(wk.end)) {
+                    wk.tokens.input += entry.tokens.input;
+                    wk.tokens.output += entry.tokens.output;
+                    wk.tokens.cacheRead += entry.tokens.cacheRead;
+                    wk.tokens.cacheCreate += entry.tokens.cacheCreate;
+                    wk.cost += entryCost;
+                    wk.sessions.add(entry.sessionId);
+                    break;
+                }
+            }
+
+            // Today
+            if (ts >= todayStart && ts < new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)) {
+                today.tokens.input += entry.tokens.input;
+                today.tokens.output += entry.tokens.output;
+                today.tokens.cacheRead += entry.tokens.cacheRead;
+                today.tokens.cacheCreate += entry.tokens.cacheCreate;
+                today.cost += entryCost;
+                today.sessions.add(entry.sessionId);
+            }
+        }
+
+        // 7. Finalize: convert Sets to counts, round costs, compute derived fields
+        const finalWindows = windows.map(w => ({
+            start: w.start,
+            end: w.end,
+            tokens: w.tokens,
+            cost: Math.round(w.cost * 1_000_000) / 1_000_000,
+            sessions: w.sessions.size
+        }));
+
+        // Determine current window (the one containing "now")
+        let currentWindow = null;
+        for (const w of finalWindows) {
+            if (now >= new Date(w.start) && now < new Date(w.end)) {
+                currentWindow = { ...w, current: true };
+                break;
+            }
+        }
+        // Fallback: last window
+        if (!currentWindow && finalWindows.length > 0) {
+            currentWindow = { ...finalWindows[finalWindows.length - 1], current: true };
+        }
+
+        const finalWeeks = weeks.map((wk, i) => {
+            const daysInWeek = Math.min(
+                7,
+                Math.max(1, Math.ceil((Math.min(now.getTime(), new Date(wk.end).getTime()) - new Date(wk.start).getTime()) / (24 * 60 * 60 * 1000)))
+            );
+            const cost = Math.round(wk.cost * 1_000_000) / 1_000_000;
+            const result = {
+                start: wk.start,
+                end: wk.end,
+                tokens: wk.tokens,
+                cost,
+                sessions: wk.sessions.size,
+                avgDaily: Math.round((cost / daysInWeek) * 100) / 100
+            };
+            return result;
+        });
+
+        // Compute deltaVsPrev for the current (last) week
+        const currentWeekIdx = finalWeeks.length - 1;
+        if (currentWeekIdx > 0) {
+            const prev = finalWeeks[currentWeekIdx - 1];
+            if (prev.cost > 0) {
+                finalWeeks[currentWeekIdx].deltaVsPrev = Math.round(
+                    ((finalWeeks[currentWeekIdx].cost - prev.cost) / prev.cost) * 100
+                );
+            } else {
+                finalWeeks[currentWeekIdx].deltaVsPrev = finalWeeks[currentWeekIdx].cost > 0 ? 100 : 0;
+            }
+        }
+
+        const currentWeek = finalWeeks.length > 0 ? { ...finalWeeks[currentWeekIdx] } : null;
+
+        const todayResult = {
+            tokens: today.tokens,
+            cost: Math.round(today.cost * 1_000_000) / 1_000_000,
+            sessions: today.sessions.size
+        };
+
+        usageWindowsCache = {
+            currentWindow,
+            windows: finalWindows,
+            currentWeek,
+            weeks: finalWeeks,
+            today: todayResult,
+            computedAt: new Date().toISOString()
+        };
+        usageWindowsCacheTime = Date.now();
+        res.json(usageWindowsCache);
+    } catch (err) {
+        console.error('Error in /api/usage-windows:', err);
+        res.status(500).json({ error: 'Failed to compute usage windows' });
+    }
 });
 
 // GET /api/plans
@@ -4127,87 +4340,6 @@ app.get('/api/sessions/:project/:sessionId/export', async (req, res) => {
     }
 });
 
-// POST /api/sessions/:project/:sessionId/snapshot — create a note with session summary
-app.post('/api/sessions/:project/:sessionId/snapshot', async (req, res) => {
-    const {
-        project,
-        sessionId
-    } = req.params;
-    const filePath = path.join(PROJECTS_DIR, project, `${sessionId}.jsonl`);
-    if (!filePath.startsWith(PROJECTS_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    try {
-        const messages = await parseJsonl(filePath);
-        if (!messages.length) return res.status(404).json({
-            error: 'session not found or empty'
-        });
-
-        // Extract metadata
-        const first = messages[0];
-        const branch = first.gitBranch || '';
-        const date = first.timestamp ? first.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
-
-        // Extract user prompts (skip <command-name> tool messages)
-        const prompts = [];
-        // Track last tool per file (Write wins over Edit)
-        const fileToolMap = new Map(); // filePath → 'Write'|'Edit'
-        for (const m of messages) {
-            if (m.type === 'user') {
-                const c = m.message?.content;
-                let text = '';
-                if (typeof c === 'string') text = c;
-                else if (Array.isArray(c)) {
-                    text = c.filter(b => b.type === 'text' && !b.text?.includes('<command-name>')).map(b => b.text).join('\n');
-                }
-                text = text.trim();
-                if (text && text.length > 2) prompts.push(text);
-            } else if (m.type === 'assistant') {
-                const content = m.message?.content;
-                if (!Array.isArray(content)) continue;
-                for (const block of content) {
-                    if (block.type !== 'tool_use') continue;
-                    if ((block.name === 'Edit' || block.name === 'Write') && block.input?.file_path) {
-                        fileToolMap.set(block.input.file_path, block.name);
-                    }
-                }
-            }
-        }
-
-        const firstPrompt = prompts[0] || sessionId;
-        const title = `Snapshot: ${firstPrompt.slice(0, 60)}${firstPrompt.length > 60 ? '…' : ''}`;
-
-        const projectLabel = project.replace(/^-Users-[^-]+-/, '').replace(/-/g, '/');
-        const meta = [`**Project:** ${projectLabel}`, branch ? `**Branch:** ${branch}` : '', `**Date:** ${date}`, `**Session:** ${sessionId.slice(0, 8)}…`].filter(Boolean).join(' · ');
-
-        const promptList = prompts.map((p, i) => `${i + 1}. ${p.replace(/\n+/g, ' ').slice(0, 200)}${p.length > 200 ? '…' : ''}`).join('\n');
-
-        const fileLines = [...fileToolMap.entries()]
-            .map(([fp, tool]) => `- \`${fp}\`${tool === 'Write' ? ' *(created)*' : ''}`)
-            .join('\n');
-        const filesSection = fileToolMap.size > 0 ? `\n\n## Files changed\n\n${fileLines}` : '';
-
-        const content = `${meta}\n\n## Prompts\n\n${promptList}${filesSection}\n\n## Notes\n\n`;
-
-        ensureNotesDir();
-        const slug = firstPrompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'snapshot';
-        const datePrefix = date;
-        let filename = `${datePrefix}-snapshot-${slug}.md`;
-        let i = 1;
-        while (fs.existsSync(path.join(NOTES_DIR, filename))) {
-            filename = `${datePrefix}-snapshot-${slug}-${i++}.md`;
-        }
-        const tagsLine = `\ntags: [snapshot]`;
-        const sessionLine = `\nsession: ${sessionId}`;
-        const raw = `---\ntitle: ${title}\ndate: ${new Date().toISOString()}${sessionLine}${tagsLine}\n---\n\n${content}`;
-        fs.writeFileSync(path.join(NOTES_DIR, filename), raw, 'utf8');
-        res.json(parseNoteFile(filename));
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
 
 // ─── App settings (xeladash specific, not Claude's settings.json) ─────────
 const APP_SETTINGS_FILE = path.join(DATA_DIR, 'app-settings.json');
@@ -4352,35 +4484,6 @@ app.post('/api/share/session/:project/:sessionId', async (req, res) => {
     }
 });
 
-app.post('/api/share/note/*', async (req, res) => {
-    const {
-        githubToken
-    } = readAppSettings();
-    if (!githubToken) return res.status(400).json({
-        error: 'GitHub token not configured. Add it in Settings → Sharing.'
-    });
-    const notepath = req.params[0];
-    if (!notepath || !notepath.endsWith('.md')) return res.status(400).json({
-        error: 'invalid filename'
-    });
-    const filePath = path.join(NOTES_DIR, notepath);
-    if (!filePath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    try {
-        const note = parseNoteFile(notepath);
-        const content = `# ${note.title}\n\n${note.content}`;
-        const filename = path.basename(notepath);
-        const url = await postGist(githubToken, `Note — ${note.title}`, filename, content);
-        res.json({
-            url
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
 
 app.post('/api/share/plan/:filename', async (req, res) => {
     const {
@@ -4409,854 +4512,8 @@ app.post('/api/share/plan/:filename', async (req, res) => {
     }
 });
 
-// ─── Personal Notes ───────────────────────────────────────────────────────────
-const NOTES_DIR = path.join(DATA_DIR, 'notes');
 
-function ensureNotesDir() {
-    if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, {
-        recursive: true
-    });
-}
 
-function parseNoteFile(notepath) {
-    const filePath = path.join(NOTES_DIR, notepath);
-    const stat = fs.statSync(filePath);
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const {
-        meta,
-        content: body
-    } = parseFrontmatter(raw);
-    const tags = Array.isArray(meta.tags) ? meta.tags : (meta.tags ? [meta.tags] : []);
-    const parts = notepath.replace(/\\/g, '/').split('/');
-    const filename = parts[parts.length - 1];
-    const folder = parts.slice(0, -1).join('/');
-    return {
-        filename,
-        path: notepath,
-        folder,
-        title: meta.title || filename.replace('.md', ''),
-        date: meta.date || stat.mtimeMs,
-        session: meta.session || '',
-        tags,
-        pinned: meta.pinned === true || meta.pinned === 'true',
-        content: body.trim(),
-        modified: new Date(stat.mtimeMs).toISOString(),
-    };
-}
-
-function scanNotes(dir, base) {
-    if (dir === undefined) dir = NOTES_DIR;
-    if (base === undefined) base = '';
-    const results = [];
-    try {
-        for (const entry of fs.readdirSync(dir)) {
-            const fullPath = path.join(dir, entry);
-            const relPath = base ? `${base}/${entry}` : entry;
-            if (fs.statSync(fullPath).isDirectory()) {
-                results.push(...scanNotes(fullPath, relPath));
-            } else if (entry.endsWith('.md')) {
-                results.push(parseNoteFile(relPath));
-            }
-        }
-    } catch (e) {
-        /* ignore unreadable dirs */ }
-    return results;
-}
-
-function notesClaudeMdSnippet() {
-    const d = CLAUDE_DIR_DISPLAY;
-    return `
-## Personal Notes
-
-When the user asks you to "save a note", "add to notes", "guarda esto como nota", or similar:
-1. Create a markdown file in \`${d}/xeladash/notes/\` with this exact format:
-   - Filename: \`YYYY-MM-DD-short-slug.md\` (e.g. \`2026-03-31-bug-fix-auth.md\`)
-   - Content:
-     \`\`\`
-     ---
-     title: <descriptive title>
-     date: <current ISO date>
-     session: <run: ls -t ${d}/projects/$(pwd | sed 's|/|-|g' | sed 's|^-||')/*.jsonl 2>/dev/null | head -1 | xargs basename 2>/dev/null | sed 's/\\.jsonl//'>
-     ---
-
-     <the content the user wants to save>
-     \`\`\`
-2. **Folder**: Save in a subfolder when appropriate:
-   - Project-specific note → \`${d}/xeladash/notes/<basename-of-pwd>/\` (e.g. working in \`mono-genially\` → folder \`mono-genially\`)
-   - Global/cross-project note → root \`${d}/xeladash/notes/\`
-   - User-specified folder → use that folder name
-3. **Note linking**: If the note references concepts in other notes, use \`#slug\` syntax (\`2026-03-31-my-slug.md\` → \`#my-slug\`). Glob \`${d}/xeladash/notes/**/*.md\` to discover existing slugs.
-4. Use the Write tool to create the file (not Bash).
-5. Confirm with: "Saved to Notes: http://localhost:3141/#/note/<folder/filename or filename>"
-
-The notes directory may not exist yet — the app creates it automatically on first load.
-
-## Daily TODOs (Today view)
-
-When the user asks to add a task "for today", "for tomorrow", "to review later", or similar:
-1. Determine the target date (today = current date, tomorrow = current date + 1 day)
-2. Read the existing file if it exists: \`${d}/xeladash/todos/YYYY-MM-DD.json\`
-3. Use the Write tool to save the updated file with this format:
-   \`\`\`json
-   {
-     "date": "YYYY-MM-DD",
-     "context": "",
-     "tasks": [
-       {
-         "id": "<random 8 char alphanumeric>",
-         "text": "<task description>",
-         "done": false,
-         "carriedOver": false,
-         "createdAt": "<current ISO date>"
-       }
-     ]
-   }
-   \`\`\`
-4. Confirm with: "Added to Today: http://localhost:3141 (Today section)"
-
-The todos directory may not exist yet — the app creates it automatically on first load.
-`;
-}
-
-app.get('/api/notes/claude-md-status', (req, res) => {
-    const claudeMdPath = path.join(CLAUDE_DIR, 'CLAUDE.md');
-    try {
-        const content = fs.existsSync(claudeMdPath) ? fs.readFileSync(claudeMdPath, 'utf8') : '';
-        res.json({
-            installed: content.includes('Personal Notes')
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.post('/api/notes/setup-claude', (req, res) => {
-    const claudeMdPath = path.join(CLAUDE_DIR, 'CLAUDE.md');
-    const settingsPath = CLAUDE_SETTINGS_PATH;
-    try {
-        const current = fs.existsSync(claudeMdPath) ? fs.readFileSync(claudeMdPath, 'utf8') : '';
-        if (current.includes('Personal Notes')) return res.json({
-            ok: true,
-            alreadyInstalled: true
-        });
-        // Append CLAUDE.md snippet
-        fs.writeFileSync(claudeMdPath, current + '\n' + notesClaudeMdSnippet(), 'utf8');
-        // Add Write permission for notes dir to settings.json
-        try {
-            const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
-            if (!settings.permissions) settings.permissions = {};
-            if (!settings.permissions.allow) settings.permissions.allow = [];
-            const rules = XELADASH_PERMISSIONS;
-            let changed = false;
-            for (const rule of rules) {
-                if (!settings.permissions.allow.includes(rule)) {
-                    settings.permissions.allow.push(rule);
-                    changed = true;
-                }
-            }
-            if (changed) fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-        } catch {}
-        res.json({
-            ok: true
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.get('/api/notes/folders', (req, res) => {
-    ensureNotesDir();
-    try {
-        const folders = fs.readdirSync(NOTES_DIR).filter(e => fs.statSync(path.join(NOTES_DIR, e)).isDirectory());
-        res.json(folders.sort());
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.post('/api/notes/folders', (req, res) => {
-    ensureNotesDir();
-    const {
-        name
-    } = req.body;
-    if (!name) return res.status(400).json({
-        error: 'name required'
-    });
-    const safeName = name.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
-    if (!safeName) return res.status(400).json({
-        error: 'invalid name'
-    });
-    const folderPath = path.join(NOTES_DIR, safeName);
-    if (!folderPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid name'
-    });
-    try {
-        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, {
-            recursive: true
-        });
-        res.json({
-            name: safeName
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.patch('/api/notes/folders/:name/rename', (req, res) => {
-    ensureNotesDir();
-    const {
-        name
-    } = req.params;
-    const {
-        newName
-    } = req.body;
-    if (!name || !newName) return res.status(400).json({
-        error: 'name and newName required'
-    });
-    const safeName = newName.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
-    if (!safeName) return res.status(400).json({
-        error: 'invalid newName'
-    });
-    const srcPath = path.join(NOTES_DIR, name);
-    const destPath = path.join(NOTES_DIR, safeName);
-    if (!srcPath.startsWith(NOTES_DIR) || !destPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    try {
-        if (!fs.existsSync(srcPath)) return res.status(404).json({
-            error: 'folder not found'
-        });
-        if (fs.existsSync(destPath)) return res.status(409).json({
-            error: 'folder already exists'
-        });
-        fs.renameSync(srcPath, destPath);
-        res.json({
-            name: safeName
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.delete('/api/notes/folders/:name', (req, res) => {
-    ensureNotesDir();
-    const {
-        name
-    } = req.params;
-    const {
-        action
-    } = req.query; // 'delete' | 'orphan'
-    if (!name) return res.status(400).json({
-        error: 'name required'
-    });
-    if (!['delete', 'orphan'].includes(action)) return res.status(400).json({
-        error: 'action must be delete or orphan'
-    });
-    const folderPath = path.join(NOTES_DIR, name);
-    if (!folderPath.startsWith(NOTES_DIR + path.sep) && folderPath !== NOTES_DIR) return res.status(400).json({
-        error: 'invalid name'
-    });
-    try {
-        if (!fs.existsSync(folderPath)) return res.status(404).json({
-            error: 'folder not found'
-        });
-        const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.md'));
-        if (action === 'orphan') {
-            for (const f of files) {
-                let dest = path.join(NOTES_DIR, f);
-                if (fs.existsSync(dest)) dest = path.join(NOTES_DIR, f.slice(0, -3) + '-orphaned.md');
-                fs.renameSync(path.join(folderPath, f), dest);
-            }
-        } else {
-            for (const f of files) fs.unlinkSync(path.join(folderPath, f));
-        }
-        try {
-            fs.rmdirSync(folderPath);
-        } catch {}
-        res.json({
-            ok: true,
-            action,
-            count: files.length
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-function rewriteNoteTags(notepath, updatedTags) {
-    const filePath = path.join(NOTES_DIR, notepath);
-    const existing = parseNoteFile(notepath);
-    const sessionLine = existing.session ? `\nsession: ${existing.session}` : '';
-    const tagsLine = updatedTags.length > 0 ? `\ntags: [${updatedTags.join(', ')}]` : '';
-    const pinnedLine = existing.pinned ? `\npinned: true` : '';
-    const raw = `---\ntitle: ${existing.title}\ndate: ${existing.date}${sessionLine}${tagsLine}${pinnedLine}\n---\n\n${existing.content}`;
-    fs.writeFileSync(filePath, raw, 'utf8');
-}
-
-app.patch('/api/notes/tags/:name/rename', (req, res) => {
-    const {
-        name
-    } = req.params;
-    const {
-        newName
-    } = req.body;
-    if (!name || !newName) return res.status(400).json({
-        error: 'name and newName required'
-    });
-    const safe = newName.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-    if (!safe) return res.status(400).json({
-        error: 'invalid newName'
-    });
-    ensureNotesDir();
-    try {
-        const affected = scanNotes().filter(n => (n.tags || []).includes(name));
-        for (const n of affected) {
-            const tags = n.tags.map(t => t === name ? safe : t);
-            rewriteNoteTags(n.path, tags);
-        }
-        res.json({
-            renamed: name,
-            to: safe,
-            count: affected.length
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.delete('/api/notes/tags/:name', (req, res) => {
-    const {
-        name
-    } = req.params;
-    if (!name) return res.status(400).json({
-        error: 'name required'
-    });
-    ensureNotesDir();
-    try {
-        const affected = scanNotes().filter(n => (n.tags || []).includes(name));
-        for (const n of affected) {
-            const tags = n.tags.filter(t => t !== name);
-            rewriteNoteTags(n.path, tags);
-        }
-        res.json({
-            deleted: name,
-            count: affected.length
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.get('/api/notes', (req, res) => {
-    ensureNotesDir();
-    try {
-        const notes = scanNotes().sort((a, b) => b.modified.localeCompare(a.modified));
-        res.json(notes);
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.post('/api/notes', (req, res) => {
-    ensureNotesDir();
-    const {
-        title,
-        content,
-        session,
-        tags,
-        folder
-    } = req.body;
-    if (!title) return res.status(400).json({
-        error: 'title required'
-    });
-    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'note';
-    const date = new Date().toISOString();
-    const datePrefix = date.slice(0, 10);
-    const safeFolder = folder ? folder.trim().replace(/[^a-zA-Z0-9_/-]/g, '-').replace(/^\/+|\/+$/g, '') : '';
-    const noteDir = safeFolder ? path.join(NOTES_DIR, safeFolder) : NOTES_DIR;
-    if (!noteDir.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid folder'
-    });
-    if (!fs.existsSync(noteDir)) fs.mkdirSync(noteDir, {
-        recursive: true
-    });
-    let filename = `${datePrefix}-${slug}.md`;
-    let i = 1;
-    while (fs.existsSync(path.join(noteDir, filename))) {
-        filename = `${datePrefix}-${slug}-${i++}.md`;
-    }
-    const notepath = safeFolder ? `${safeFolder}/${filename}` : filename;
-    const sessionLine = session ? `\nsession: ${session}` : '';
-    const tagsArr = Array.isArray(tags) ? tags.filter(Boolean) : [];
-    const tagsLine = tagsArr.length > 0 ? `\ntags: [${tagsArr.join(', ')}]` : '';
-    const raw = `---\ntitle: ${title}\ndate: ${date}${sessionLine}${tagsLine}\n---\n\n${content || ''}`;
-    fs.writeFileSync(path.join(NOTES_DIR, notepath), raw, 'utf8');
-    res.json(parseNoteFile(notepath));
-});
-
-app.patch('/api/notes/*/move', (req, res) => {
-    const notepath = req.params[0];
-    if (!notepath || !notepath.endsWith('.md')) return res.status(400).json({
-        error: 'invalid filename'
-    });
-    const srcPath = path.join(NOTES_DIR, notepath);
-    if (!srcPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    const {
-        folder
-    } = req.body;
-    const filename = path.basename(notepath);
-    const destDir = folder ? path.join(NOTES_DIR, folder) : NOTES_DIR;
-    const destPath = path.join(destDir, filename);
-    if (!destPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid destination'
-    });
-    try {
-        if (!fs.existsSync(srcPath)) return res.status(404).json({
-            error: 'note not found'
-        });
-        if (destPath === srcPath) return res.json(parseNoteFile(notepath));
-        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, {
-            recursive: true
-        });
-        fs.renameSync(srcPath, destPath);
-        const newRelPath = folder ? `${folder}/${filename}` : filename;
-        res.json(parseNoteFile(newRelPath));
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.patch('/api/notes/*/rename', (req, res) => {
-    const notepath = req.params[0];
-    if (!notepath || !notepath.endsWith('.md')) return res.status(400).json({
-        error: 'invalid filename'
-    });
-    const srcPath = path.join(NOTES_DIR, notepath);
-    if (!srcPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    const {
-        newFilename
-    } = req.body;
-    if (!newFilename || !newFilename.endsWith('.md') || newFilename.includes('/') || newFilename.includes('\\'))
-        return res.status(400).json({
-            error: 'newFilename must end in .md and contain no slashes'
-        });
-    const folder = path.dirname(notepath);
-    const destRelPath = folder === '.' ? newFilename : `${folder}/${newFilename}`;
-    const destPath = path.join(NOTES_DIR, destRelPath);
-    if (!destPath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid destination'
-    });
-    try {
-        if (!fs.existsSync(srcPath)) return res.status(404).json({
-            error: 'note not found'
-        });
-        if (destPath === srcPath) return res.json(parseNoteFile(notepath));
-        if (fs.existsSync(destPath)) return res.status(409).json({
-            error: 'A file with that name already exists'
-        });
-        fs.renameSync(srcPath, destPath);
-        res.json(parseNoteFile(destRelPath));
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.put('/api/notes/*', (req, res) => {
-    const notepath = req.params[0];
-    if (!notepath || !notepath.endsWith('.md')) return res.status(400).json({
-        error: 'invalid filename'
-    });
-    const filePath = path.join(NOTES_DIR, notepath);
-    if (!filePath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    const {
-        title,
-        content,
-        tags,
-        pinned
-    } = req.body;
-    try {
-        const existing = parseNoteFile(notepath);
-        const resolvedTags = Array.isArray(tags) ? tags : existing.tags;
-        const resolvedPinned = pinned !== undefined ? pinned : existing.pinned;
-        const sessionLine = existing.session ? `\nsession: ${existing.session}` : '';
-        const tagsLine = resolvedTags.length > 0 ? `\ntags: [${resolvedTags.join(', ')}]` : '';
-        const pinnedLine = resolvedPinned ? `\npinned: true` : '';
-        const raw = `---\ntitle: ${title || existing.title}\ndate: ${existing.date}${sessionLine}${tagsLine}${pinnedLine}\n---\n\n${content ?? existing.content}`;
-        fs.writeFileSync(filePath, raw, 'utf8');
-        res.json(parseNoteFile(notepath));
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.delete('/api/notes/*', (req, res) => {
-    const notepath = req.params[0];
-    if (!notepath || !notepath.endsWith('.md')) return res.status(400).json({
-        error: 'invalid filename'
-    });
-    const filePath = path.join(NOTES_DIR, notepath);
-    if (!filePath.startsWith(NOTES_DIR)) return res.status(400).json({
-        error: 'invalid path'
-    });
-    try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        res.json({
-            ok: true
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-// ─── Today / Daily TODOs ──────────────────────────────────────────────────────
-const TODOS_DIR = path.join(DATA_DIR, 'todos');
-
-function ensureTodosDir() {
-    if (!fs.existsSync(TODOS_DIR)) fs.mkdirSync(TODOS_DIR, {
-        recursive: true
-    });
-}
-
-function todayStr() {
-    return new Date().toISOString().slice(0, 10);
-}
-
-function readTodosFile(dateStr) {
-    const filePath = path.join(TODOS_DIR, `${dateStr}.json`);
-    try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    } catch {
-        return null;
-    }
-}
-
-function writeTodosFile(dateStr, data) {
-    ensureTodosDir();
-    fs.writeFileSync(path.join(TODOS_DIR, `${dateStr}.json`), JSON.stringify(data, null, 2), 'utf8');
-}
-
-app.get('/api/today', (req, res) => {
-    ensureTodosDir();
-    const today = todayStr();
-    let data = readTodosFile(today) || {
-        date: today,
-        context: '',
-        tasks: []
-    };
-
-    // Collect undone tasks from ALL previous days not already present in today's file.
-    // We track the LATEST state of each task across all previous files (oldest→newest),
-    // so a task completed on day-2 (done:true) is not re-carried from day-1 (done:false).
-    const existingIds = new Set(data.tasks.map(t => t.id));
-    const prevFiles = fs.readdirSync(TODOS_DIR)
-        .filter(f => f.endsWith('.json') && f.slice(0, 10) < today)
-        .sort(); // oldest first
-    const taskMap = new Map(); // id → latest task state
-    for (const f of prevFiles) {
-        const prev = readTodosFile(f.slice(0, 10));
-        if (!prev?.tasks) continue;
-        for (const t of prev.tasks) taskMap.set(t.id, t); // overwrite with newer version
-    }
-    const toCarry = [];
-    for (const [id, t] of taskMap) {
-        if (!existingIds.has(id) && !t.done && !t.postponed) {
-            toCarry.push({
-                ...t,
-                carriedOver: true,
-                done: false
-            });
-        }
-    }
-
-    // Remove tasks already in today's file that were actually completed in a previous day
-    // (can happen if they were incorrectly carried before this fix)
-    const staleIds = new Set(
-        data.tasks
-        .filter(t => t.carriedOver && !t.done && taskMap.get(t.id)?.done)
-        .map(t => t.id)
-    );
-
-    const dirty = toCarry.length > 0 || staleIds.size > 0;
-    if (staleIds.size > 0) data.tasks = data.tasks.filter(t => !staleIds.has(t.id));
-    if (toCarry.length > 0) data.tasks = [...toCarry, ...data.tasks];
-    if (dirty) writeTodosFile(today, data);
-
-    res.json(data);
-});
-
-app.put('/api/today', (req, res) => {
-    const today = todayStr();
-    const {
-        context,
-        tasks
-    } = req.body;
-    const current = readTodosFile(today) || {
-        date: today,
-        context: '',
-        tasks: []
-    };
-    if (context !== undefined) current.context = context;
-    if (tasks !== undefined) current.tasks = tasks;
-    writeTodosFile(today, current);
-    res.json(current);
-});
-
-app.post('/api/today/postpone', (req, res) => {
-    const {
-        taskId,
-        targetDate
-    } = req.body;
-    if (!taskId || !targetDate) return res.status(400).json({
-        error: 'taskId and targetDate required'
-    });
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return res.status(400).json({
-        error: 'invalid date'
-    });
-    const today = todayStr();
-    if (targetDate <= today) return res.status(400).json({
-        error: 'targetDate must be in the future'
-    });
-    const current = readTodosFile(today) || {
-        date: today,
-        context: '',
-        tasks: []
-    };
-    const taskIdx = current.tasks.findIndex(t => t.id === taskId);
-    if (taskIdx === -1) return res.status(404).json({
-        error: 'task not found'
-    });
-    const [task] = current.tasks.splice(taskIdx, 1);
-    writeTodosFile(today, current);
-    // Mark as postponed in all previous day files so carry-over logic skips it
-    const allPrev = fs.readdirSync(TODOS_DIR)
-        .filter(f => f.endsWith('.json') && f.slice(0, 10) < today);
-    for (const f of allPrev) {
-        const d = readTodosFile(f.slice(0, 10));
-        if (!d?.tasks) continue;
-        const idx = d.tasks.findIndex(t => t.id === taskId);
-        if (idx !== -1) {
-            d.tasks[idx].postponed = true;
-            writeTodosFile(f.slice(0, 10), d);
-        }
-    }
-    // Add to target date
-    const target = readTodosFile(targetDate) || {
-        date: targetDate,
-        context: '',
-        tasks: []
-    };
-    if (!target.tasks.find(t => t.id === task.id)) {
-        const {
-            postponed: _,
-            ...cleanTask
-        } = task;
-        target.tasks.push({
-            ...cleanTask,
-            carriedOver: true,
-            done: false,
-            postponed: false,
-            postponeCount: (task.postponeCount || 0) + 1
-        });
-        writeTodosFile(targetDate, target);
-    }
-    res.json({
-        ok: true
-    });
-});
-
-app.get('/api/today/upcoming', (req, res) => {
-    ensureTodosDir();
-    const today = todayStr();
-    const result = [];
-    for (let i = 1; i <= 7; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        const dateStr = d.toISOString().slice(0, 10);
-        const data = readTodosFile(dateStr);
-        const tasks = (data?.tasks || []).filter(t => !t.done);
-        if (tasks.length > 0) result.push({
-            date: dateStr,
-            tasks
-        });
-    }
-    res.json(result);
-});
-
-app.post('/api/today/pull', (req, res) => {
-    const {
-        taskId,
-        fromDate
-    } = req.body;
-    if (!taskId || !fromDate) return res.status(400).json({
-        error: 'taskId and fromDate required'
-    });
-    const today = todayStr();
-    const source = readTodosFile(fromDate);
-    if (!source?.tasks) return res.status(404).json({
-        error: 'source not found'
-    });
-    const idx = source.tasks.findIndex(t => t.id === taskId);
-    if (idx === -1) return res.status(404).json({
-        error: 'task not found'
-    });
-    const [task] = source.tasks.splice(idx, 1);
-    writeTodosFile(fromDate, source);
-    const current = readTodosFile(today) || {
-        date: today,
-        context: '',
-        tasks: []
-    };
-    if (!current.tasks.find(t => t.id === taskId)) {
-        current.tasks.push({
-            ...task,
-            carriedOver: false,
-            done: false,
-            postponed: false
-        });
-        writeTodosFile(today, current);
-    }
-    res.json({
-        ok: true
-    });
-});
-
-// ─── URL to Markdown ─────────────────────────────────────────────────────────
-const WEBMD_DIR = path.join(DATA_DIR, 'webmd');
-
-function ensureWebmdDir() {
-    if (!fs.existsSync(WEBMD_DIR)) fs.mkdirSync(WEBMD_DIR, {
-        recursive: true
-    });
-}
-
-function slugify(url) {
-    return url.replace(/^https?:\/\//, '').replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 60) +
-        '-' + Date.now();
-}
-
-app.post('/api/webmd/fetch', async (req, res) => {
-    try {
-        const {
-            url
-        } = req.body;
-        if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({
-            error: 'URL inválida'
-        });
-        const jinaUrl = 'https://r.jina.ai/' + url;
-        const raw = await fetchRemote(jinaUrl);
-        if (raw.length > 500_000) return res.status(413).json({
-            error: 'Página demasiado grande (>500KB)'
-        });
-        // Extract title from first markdown heading or URL
-        const titleMatch = raw.match(/^#\s+(.+)$/m);
-        const title = titleMatch ? titleMatch[1].trim() : url;
-        res.json({
-            title,
-            markdown: raw
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.get('/api/webmd', (req, res) => {
-    ensureWebmdDir();
-    try {
-        const files = fs.readdirSync(WEBMD_DIR).filter(f => f.endsWith('.json')).sort().reverse();
-        const items = files.map(f => {
-            try {
-                return JSON.parse(fs.readFileSync(path.join(WEBMD_DIR, f), 'utf8'));
-            } catch {
-                return null;
-            }
-        }).filter(Boolean);
-        res.json(items);
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.post('/api/webmd/save', (req, res) => {
-    ensureWebmdDir();
-    try {
-        const {
-            url,
-            title,
-            markdown
-        } = req.body;
-        if (!url || !markdown) return res.status(400).json({
-            error: 'url y markdown requeridos'
-        });
-        const slug = slugify(url);
-        const entry = {
-            slug,
-            url,
-            title: title || url,
-            markdown,
-            savedAt: new Date().toISOString()
-        };
-        fs.writeFileSync(path.join(WEBMD_DIR, `${slug}.json`), JSON.stringify(entry, null, 2), 'utf8');
-        res.json(entry);
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-
-app.delete('/api/webmd/:slug', (req, res) => {
-    try {
-        const slug = req.params.slug.replace(/[^a-z0-9-]/gi, '');
-        const filePath = path.join(WEBMD_DIR, `${slug}.json`);
-        if (!filePath.startsWith(WEBMD_DIR + path.sep)) return res.status(400).json({
-            error: 'Invalid slug'
-        });
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        res.json({
-            ok: true
-        });
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

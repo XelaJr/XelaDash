@@ -164,7 +164,7 @@
       </div>
     </div>
 
-    <template x-if="showToday || showInsights || showNotes || showTemplates || showWebmd">
+    <template x-if="showInsights || showTemplates">
       <div>
         <div class="nav-divider"></div>
         <div class="nav-section-label" @click="widgetsOpen=!widgetsOpen;localStorage.setItem('cs:widgetsOpen',widgetsOpen)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding-right:12px;user-select:none">
@@ -172,18 +172,6 @@
           <svg :style="widgetsOpen ? '' : 'transform:rotate(-90deg)'" style="transition:transform 0.15s" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,3 5,7 8,3"/></svg>
         </div>
         <div class="nav-section" x-show="widgetsOpen || navWidth <= 56">
-          <div x-show="showToday" class="nav-item nav-widget" :class="{ active: view === 'today' }" @click="view='today';selectedSession=null;loadToday()">
-            <span class="nav-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="2" y="2" width="12" height="12" rx="1"/>
-                <line x1="5" y1="2" x2="5" y2="5"/><line x1="11" y1="2" x2="11" y2="5"/>
-                <line x1="2" y1="7" x2="14" y2="7"/>
-                <text x="5" y="13" font-size="5" fill="currentColor" stroke="none" font-weight="bold" x-text="new Date().getDate()"></text>
-              </svg>
-            </span>
-            <span class="nav-text">Today</span>
-            <span class="nav-count" x-show="todayData && todayData.tasks.filter(t=>!t.done).length > 0" x-text="todayData ? todayData.tasks.filter(t=>!t.done).length : ''"></span>
-          </div>
           <div x-show="showInsights" class="nav-item nav-widget" :class="{ active: view === 'dashboard' }" @click="view='dashboard';selectedSession=null;loadStats();loadInsights()">
             <span class="nav-icon">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -193,17 +181,6 @@
               </svg>
             </span>
             <span class="nav-text">Analytics</span>
-          </div>
-          <div x-show="showNotes" class="nav-item nav-widget" :class="{ active: view === 'notes' }" @click="view='notes';selectedSession=null;loadPersonalNotes()">
-            <span class="nav-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke="currentColor">
-                <path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
-                <polyline points="11 2 11 5 14 5"/>
-                <line x1="5" y1="7" x2="11" y2="7"/><line x1="5" y1="10" x2="9" y2="10"/>
-              </svg>
-            </span>
-            <span class="nav-text">Journal</span>
-            <span class="nav-count" x-show="personalNotes.length>0" x-text="personalNotes.length"></span>
           </div>
           <div x-show="showTemplates" class="nav-item nav-widget" :class="{ active: view === 'templates' }" @click="view='templates';selectedSession=null;loadTemplates()">
             <span class="nav-icon">
@@ -216,19 +193,6 @@
             </span>
             <span class="nav-text">Prompts</span>
             <span class="nav-count" x-show="templates.length>0" x-text="templates.length"></span>
-          </div>
-          <div x-show="showWebmd" class="nav-item nav-widget" :class="{ active: view === 'webmd' }" @click="view='webmd';selectedSession=null;loadWebmd()">
-            <span class="nav-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6z"/>
-                <polyline points="9 2 9 6 13 6"/>
-                <line x1="5" y1="9" x2="11" y2="9"/>
-                <line x1="5" y1="12" x2="8" y2="12"/>
-                <path d="M10.5 11.5 L12 10 L13.5 11.5" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <span class="nav-text">URL to MD</span>
-            <span class="nav-count" x-show="webmdItems.length>0" x-text="webmdItems.length"></span>
           </div>
         </div>
       </div>
@@ -639,6 +603,85 @@
                   <span>More</span>
                 </div>
               </div>
+            </template>
+
+            <!-- Usage Windows -->
+            <template x-if="usageWindows">
+            <div style="margin-bottom:20px">
+              <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px">Usage Windows</div>
+
+              <!-- Usage stats -->
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+                <!-- Current 5h window -->
+                <div class="db-card">
+                  <div class="db-card-label">Current 5h window</div>
+                  <div class="db-card-value" x-text="'$' + (usageWindows.currentWindow.cost || 0).toFixed(2)"></div>
+                  <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.currentWindow.tokens.input + usageWindows.currentWindow.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                  <div class="db-card-sub" style="margin-top:6px">
+                    <span x-text="usageWindows.currentWindow.sessions"></span> sessions ·
+                    <span style="color:var(--ink-3)" x-text="windowResetLabel()"></span>
+                  </div>
+                </div>
+
+                <!-- Today -->
+                <div class="db-card">
+                  <div class="db-card-label">Today</div>
+                  <div class="db-card-value" x-text="'$' + (usageWindows.today.cost || 0).toFixed(2)"></div>
+                  <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.today.tokens.input + usageWindows.today.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                  <div class="db-card-sub" style="margin-top:6px">
+                    <span x-text="usageWindows.today.sessions"></span> sessions ·
+                    in: <span x-text="(usageWindows.today.tokens.input / 1e6).toFixed(1) + 'M'"></span> ·
+                    out: <span x-text="(usageWindows.today.tokens.output / 1e6).toFixed(1) + 'M'"></span>
+                  </div>
+                </div>
+
+                <!-- This week -->
+                <div class="db-card">
+                  <div class="db-card-label">This week</div>
+                  <div class="db-card-value" x-text="'$' + (usageWindows.currentWeek.cost || 0).toFixed(2)"></div>
+                  <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.currentWeek.tokens.input + usageWindows.currentWeek.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                  <div class="db-card-sub" style="margin-top:6px">
+                    <span x-text="usageWindows.currentWeek.sessions"></span> sessions ·
+                    $<span x-text="(usageWindows.currentWeek.avgDaily || 0).toFixed(2)"></span>/day avg
+                    <template x-if="usageWindows.currentWeek.deltaVsPrev !== null && usageWindows.currentWeek.deltaVsPrev !== undefined">
+                      <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:#e55' : 'color:#5b5'"
+                        x-text="(usageWindows.currentWeek.deltaVsPrev > 0 ? ' +' : ' ') + usageWindows.currentWeek.deltaVsPrev + '%'">
+                      </span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5h window bars -->
+              <div style="background:var(--surface-2);border-radius:8px;padding:14px 16px;margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:10px">5-hour windows · last 7 days</div>
+                <div style="display:flex;gap:1px;align-items:flex-end;height:60px">
+                  <template x-for="bar in windowBars()" :key="bar.start">
+                    <div :style="'flex:1;min-width:0;height:' + bar.pct + '%;border-radius:2px 2px 0 0;transition:height .3s;cursor:default;' + (bar.isCurrent ? 'background:var(--blue,#4a9eff)' : bar.cost > 0 ? 'background:var(--ink-3)' : 'background:var(--surface-3)')"
+                      :title="bar.label + ': $' + bar.cost.toFixed(2) + ' (' + bar.sessions + ' sessions)'">
+                    </div>
+                  </template>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px">
+                  <span style="font-size:9px;color:var(--ink-3)">7 days ago</span>
+                  <span style="font-size:9px;color:var(--ink-3)">now</span>
+                </div>
+              </div>
+
+              <!-- Weekly bars -->
+              <div style="background:var(--surface-2);border-radius:8px;padding:14px 16px">
+                <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:10px">Weekly usage · last 5 weeks</div>
+                <div style="display:flex;gap:8px;align-items:flex-end;height:80px">
+                  <template x-for="bar in weekBars()" :key="bar.weekStart">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                      <div style="font-size:10px;color:var(--ink-2)" x-text="'$' + bar.cost.toFixed(2)"></div>
+                      <div :style="'width:100%;border-radius:3px;min-height:2px;transition:height .3s;height:' + bar.pct + '%;' + (bar.isCurrent ? 'background:var(--blue,#4a9eff)' : 'background:var(--ink-3)')"></div>
+                      <div style="font-size:9px;color:var(--ink-3)" x-text="bar.weekLabel"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
             </template>
 
             <!-- Row 4: Insights -->
@@ -1246,7 +1289,6 @@
                 <button class="export-drop-item" @click="copySessionMd(); exportDropOpen=false">Copy as Markdown</button>
                 <button class="export-drop-item" @click="shareSession(); exportDropOpen=false" :disabled="!!shareMsg"><span x-text="shareMsg || 'Publish to Gist'"></span></button>
                 <button class="export-drop-item" @click="navigator.clipboard.writeText(location.origin+location.pathname+'#/session/'+selectedSession.projectDir+'/'+selectedSession.sessionId);exportDropOpen=false">Copy local link</button>
-                <button class="export-drop-item" @click="snapshotSession();exportDropOpen=false" :disabled="snapshottingSession" x-text="snapshottingSession ? 'Saving…' : 'Snapshot → Note'"></button>
                 <div style="height:1px;background:var(--rule);margin:4px 0"></div>
                 <button class="export-drop-item" style="color:var(--red)" @click="deleteSession();exportDropOpen=false" x-show="!deletingSession">Delete session</button>
               </div>
@@ -1922,6 +1964,85 @@
                 </div>
               </div>
 
+              <!-- Usage Windows -->
+              <template x-if="usageWindows">
+              <div style="margin-bottom:20px">
+                <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px">Usage Windows</div>
+
+                <!-- Usage stats -->
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+                  <!-- Current 5h window -->
+                  <div class="db-card">
+                    <div class="db-card-label">Current 5h window</div>
+                    <div class="db-card-value" x-text="'$' + (usageWindows.currentWindow.cost || 0).toFixed(2)"></div>
+                    <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.currentWindow.tokens.input + usageWindows.currentWindow.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                    <div class="db-card-sub" style="margin-top:6px">
+                      <span x-text="usageWindows.currentWindow.sessions"></span> sessions ·
+                      <span style="color:var(--ink-3)" x-text="windowResetLabel()"></span>
+                    </div>
+                  </div>
+
+                  <!-- Today -->
+                  <div class="db-card">
+                    <div class="db-card-label">Today</div>
+                    <div class="db-card-value" x-text="'$' + (usageWindows.today.cost || 0).toFixed(2)"></div>
+                    <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.today.tokens.input + usageWindows.today.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                    <div class="db-card-sub" style="margin-top:6px">
+                      <span x-text="usageWindows.today.sessions"></span> sessions ·
+                      in: <span x-text="(usageWindows.today.tokens.input / 1e6).toFixed(1) + 'M'"></span> ·
+                      out: <span x-text="(usageWindows.today.tokens.output / 1e6).toFixed(1) + 'M'"></span>
+                    </div>
+                  </div>
+
+                  <!-- This week -->
+                  <div class="db-card">
+                    <div class="db-card-label">This week</div>
+                    <div class="db-card-value" x-text="'$' + (usageWindows.currentWeek.cost || 0).toFixed(2)"></div>
+                    <div style="font-size:18px;font-weight:600;color:var(--ink-2);margin-top:2px" x-text="((usageWindows.currentWeek.tokens.input + usageWindows.currentWeek.tokens.output) / 1e6).toFixed(2) + 'M tokens'"></div>
+                    <div class="db-card-sub" style="margin-top:6px">
+                      <span x-text="usageWindows.currentWeek.sessions"></span> sessions ·
+                      $<span x-text="(usageWindows.currentWeek.avgDaily || 0).toFixed(2)"></span>/day avg
+                      <template x-if="usageWindows.currentWeek.deltaVsPrev !== null && usageWindows.currentWeek.deltaVsPrev !== undefined">
+                        <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:#e55' : 'color:#5b5'"
+                          x-text="(usageWindows.currentWeek.deltaVsPrev > 0 ? ' +' : ' ') + usageWindows.currentWeek.deltaVsPrev + '%'">
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 5h window bars -->
+                <div style="background:var(--surface-2);border-radius:8px;padding:14px 16px;margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:10px">5-hour windows · last 7 days</div>
+                  <div style="display:flex;gap:1px;align-items:flex-end;height:60px">
+                    <template x-for="bar in windowBars()" :key="bar.start">
+                      <div :style="'flex:1;min-width:0;height:' + bar.pct + '%;border-radius:2px 2px 0 0;transition:height .3s;cursor:default;' + (bar.isCurrent ? 'background:var(--blue,#4a9eff)' : bar.cost > 0 ? 'background:var(--ink-3)' : 'background:var(--surface-3)')"
+                        :title="bar.label + ': $' + bar.cost.toFixed(2) + ' (' + bar.sessions + ' sessions)'">
+                      </div>
+                    </template>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;margin-top:4px">
+                    <span style="font-size:9px;color:var(--ink-3)">7 days ago</span>
+                    <span style="font-size:9px;color:var(--ink-3)">now</span>
+                  </div>
+                </div>
+
+                <!-- Weekly bars -->
+                <div style="background:var(--surface-2);border-radius:8px;padding:14px 16px">
+                  <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:10px">Weekly usage · last 5 weeks</div>
+                  <div style="display:flex;gap:8px;align-items:flex-end;height:80px">
+                    <template x-for="bar in weekBars()" :key="bar.weekStart">
+                      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                        <div style="font-size:10px;color:var(--ink-2)" x-text="'$' + bar.cost.toFixed(2)"></div>
+                        <div :style="'width:100%;border-radius:3px;min-height:2px;transition:height .3s;height:' + bar.pct + '%;' + (bar.isCurrent ? 'background:var(--blue,#4a9eff)' : 'background:var(--ink-3)')"></div>
+                        <div style="font-size:9px;color:var(--ink-3)" x-text="bar.weekLabel"></div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+              </template>
+
               <div class="branches-wrap">
                 <div class="heatmap-section-title" style="margin-bottom:16px">Top branches</div>
                 <template x-for="[branch, count] in topBranches()" :key="branch">
@@ -1940,160 +2061,6 @@
       </div>
     </template>
 
-    <!-- Today view -->
-    <template x-if="view === 'today' && !selectedSession">
-      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
-        <div class="topbar">
-          <span class="topbar-title">Today</span>
-          <span style="font-size:11px;color:var(--ink-3)" x-text="new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})"></span>
-          <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-            <span x-show="todayCopied" style="font-size:12px;color:var(--green)" x-transition>Copied!</span>
-            <button class="btn btn-sm" style="background:var(--canvas-2);color:var(--ink);border:1px solid var(--rule)" @click="copyTodayForClaude()" title="Copy tasks + context formatted for Claude">Copy for Claude</button>
-          </div>
-        </div>
-        <span class="section-sub">Your task list for the day — incomplete tasks carry over automatically</span>
-        <div style="flex:1;overflow-y:auto;padding:24px;max-width:680px;width:100%">
-          <template x-if="todayLoading"><div class="loading"><div class="spinner"></div> Loading…</div></template>
-          <template x-if="!todayLoading && todayData">
-            <div style="display:flex;flex-direction:column;gap:20px">
-
-              <!-- Context -->
-              <div>
-                <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Context for today</div>
-                <textarea x-model="todayData.context" @input="saveToday()" placeholder="Hours available, meetings, energy level, deadlines…" rows="2" style="width:100%;background:var(--canvas-2);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--ink);font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
-              </div>
-
-              <!-- Task list -->
-              <div>
-                <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
-                  Tasks — <span x-text="todayData.tasks.filter(t=>!t.done).length"></span> pending
-                </div>
-
-                <!-- Carried over -->
-                <template x-if="todayData.tasks.some(t => t.carriedOver && !t.done)">
-                  <div style="margin-bottom:12px">
-                    <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">↩ Carried over</div>
-                    <template x-for="task in todayData.tasks.filter(t => t.carriedOver && !t.done)" :key="task.id">
-                      <div style="position:relative;display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:4px;background:var(--canvas-2);border:1px solid var(--rule);border-left:3px solid var(--ink-3);border-radius:4px">
-                        <input type="checkbox" :checked="task.done" @change="toggleTodayTask(task.id)" style="flex-shrink:0;cursor:pointer" />
-                        <span style="flex:1;font-size:13px;color:var(--ink-2)">
-                          <template x-if="editingTaskId === task.id">
-                            <input :id="'task-edit-' + task.id" type="text" x-model="taskEditText" @keydown.enter.prevent="commitEditTask(task.id)" @keydown.escape="editingTaskId=''" @blur="commitEditTask(task.id)" style="width:100%;font-size:13px;background:var(--canvas);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;color:var(--ink)" />
-                          </template>
-                          <template x-if="editingTaskId !== task.id">
-                            <span @dblclick="startEditTask(task)" x-text="task.text" title="Doble-click para editar"></span>
-                          </template>
-                          <template x-if="task.noteRef"><a class="note-ref-chip" @click.prevent="view='notes';selectedNote=personalNotes.find(n=>n.path===task.noteRef.path)||null" href="#" x-text="'↗ '+task.noteRef.title"></a></template>
-                        </span>
-                        <template x-if="taskAgeDays(task) > 0">
-                          <span :title="'Created ' + taskAgeDays(task) + ' day(s) ago'" :style="'font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;flex-shrink:0;' + (taskAgeDays(task) >= 3 ? 'background:var(--red-dim,#3a1a1a);color:var(--red)' : 'background:rgba(245,158,11,.15);color:#f59e0b')" x-text="taskAgeDays(task) + 'd'"></span>
-                        </template>
-                        <template x-if="task.postponeCount > 0">
-                          <span :title="'Snoozed ' + task.postponeCount + ' time(s)'" style="font-size:10px;color:var(--ink-3);flex-shrink:0">↷<span x-text="task.postponeCount"></span></span>
-                        </template>
-                        <div style="position:relative;flex-shrink:0">
-                          <button @click.stop="postponeMenuTask = postponeMenuTask === task.id ? '' : task.id" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:13px;padding:0 3px;line-height:1;opacity:.6" @mouseenter="$el.style.opacity=1" @mouseleave="$el.style.opacity=.6" title="Snooze">⏭</button>
-                          <template x-if="postponeMenuTask === task.id">
-                            <div style="position:absolute;right:0;top:100%;z-index:50;background:var(--canvas);border:1px solid var(--rule-2);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.18);padding:4px 0;min-width:120px" @click.outside="postponeMenuTask=''">
-                              <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,1)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">Tomorrow</div>
-                              <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,2)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">+2 days</div>
-                              <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,3)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">+3 days</div>
-                              <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,7)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">Next week</div>
-                            </div>
-                          </template>
-                        </div>
-                        <button @click="deleteTodayTask(task.id)" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Remove">×</button>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-
-                <!-- Today's tasks -->
-                <template x-for="task in todayData.tasks.filter(t => !t.carriedOver && !t.done)" :key="task.id">
-                  <div style="position:relative;display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--rule)">
-                    <input type="checkbox" :checked="task.done" @change="toggleTodayTask(task.id)" style="flex-shrink:0;cursor:pointer" />
-                    <span style="flex:1;font-size:13px;color:var(--ink)">
-                      <template x-if="editingTaskId === task.id">
-                        <input :id="'task-edit-' + task.id" type="text" x-model="taskEditText" @keydown.enter.prevent="commitEditTask(task.id)" @keydown.escape="editingTaskId=''" @blur="commitEditTask(task.id)" style="width:100%;font-size:13px;background:var(--canvas);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;color:var(--ink)" />
-                      </template>
-                      <template x-if="editingTaskId !== task.id">
-                        <span @dblclick="startEditTask(task)" x-text="task.text" title="Doble-click para editar"></span>
-                      </template>
-                      <template x-if="task.noteRef"><a class="note-ref-chip" @click.prevent="view='notes';selectedNote=personalNotes.find(n=>n.path===task.noteRef.path)||null" href="#" x-text="'↗ '+task.noteRef.title"></a></template>
-                    </span>
-                    <template x-if="taskAgeDays(task) > 0">
-                      <span :title="'Created ' + taskAgeDays(task) + ' day(s) ago'" :style="'font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;flex-shrink:0;' + (taskAgeDays(task) >= 3 ? 'background:var(--red-dim,#3a1a1a);color:var(--red)' : 'background:rgba(245,158,11,.15);color:#f59e0b')" x-text="taskAgeDays(task) + 'd'"></span>
-                    </template>
-                    <template x-if="task.postponeCount > 0">
-                      <span :title="'Snoozed ' + task.postponeCount + ' time(s)'" style="font-size:10px;color:var(--ink-3);flex-shrink:0">↷<span x-text="task.postponeCount"></span></span>
-                    </template>
-                    <div style="position:relative;flex-shrink:0">
-                      <button @click.stop="postponeMenuTask = postponeMenuTask === task.id ? '' : task.id" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:13px;padding:0 3px;line-height:1;opacity:.6" @mouseenter="$el.style.opacity=1" @mouseleave="$el.style.opacity=.6" title="Snooze">⏭</button>
-                      <template x-if="postponeMenuTask === task.id">
-                        <div style="position:absolute;right:0;top:100%;z-index:50;background:var(--canvas);border:1px solid var(--rule-2);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.18);padding:4px 0;min-width:120px" @click.outside="postponeMenuTask=''">
-                          <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,1)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">Tomorrow</div>
-                          <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,2)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">+2 days</div>
-                          <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,3)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">+3 days</div>
-                          <div style="font-size:11px;padding:5px 12px;cursor:pointer;color:var(--ink-2)" @click="postponeTask(task.id,7)" @mouseenter="$el.style.background='var(--canvas-2)'" @mouseleave="$el.style.background=''">Next week</div>
-                        </div>
-                      </template>
-                    </div>
-                    <button @click="deleteTodayTask(task.id)" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Remove">×</button>
-                  </div>
-                </template>
-
-                <!-- Done tasks -->
-                <template x-if="todayData.tasks.some(t => t.done)">
-                  <div style="margin-top:12px">
-                    <div style="font-size:10px;color:var(--ink-3);margin-bottom:4px">✓ Hecho</div>
-                    <template x-for="task in todayData.tasks.filter(t => t.done)" :key="task.id">
-                      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--rule);opacity:0.5">
-                        <input type="checkbox" :checked="task.done" @change="toggleTodayTask(task.id)" style="flex-shrink:0;cursor:pointer" />
-                        <span style="flex:1;font-size:13px;text-decoration:line-through;color:var(--ink-3)">
-                          <span x-text="task.text"></span>
-                          <template x-if="task.noteRef"><a class="note-ref-chip" @click.prevent="view='notes';selectedNote=personalNotes.find(n=>n.path===task.noteRef.path)||null" href="#" x-text="'↗ '+task.noteRef.title"></a></template>
-                        </span>
-
-                        <button @click="deleteTodayTask(task.id)" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Remove">×</button>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-
-                <!-- Add task -->
-                <div style="display:flex;gap:8px;margin-top:12px">
-                  <input class="search-input" type="text" x-model="todayNewTask" placeholder="Add a task…" style="flex:1;font-size:13px" @keydown.enter="addTodayTask()" />
-                  <button class="btn btn-primary btn-sm" @click="addTodayTask()" :disabled="!todayNewTask.trim()">Add</button>
-                </div>
-
-                <!-- Upcoming days -->
-                <template x-if="upcomingTasks.length > 0">
-                  <div style="margin-top:20px;border-top:1px solid var(--rule);padding-top:14px">
-                    <div style="font-size:10px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Upcoming days</div>
-                    <template x-for="group in upcomingTasks" :key="group.date">
-                      <div style="margin-bottom:10px">
-                        <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;font-weight:500" x-text="formatUpcomingDate(group.date)"></div>
-                        <template x-for="task in group.tasks" :key="task.id">
-                          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:3px;background:var(--canvas-2);border:1px solid var(--rule);border-radius:4px;opacity:.85">
-                            <span style="flex:1;font-size:12px;color:var(--ink-2)" x-text="task.text"></span>
-                            <template x-if="task.postponeCount > 0">
-                              <span :title="'Snoozed ' + task.postponeCount + ' time(s)'" style="font-size:10px;color:var(--ink-3);flex-shrink:0">↷<span x-text="task.postponeCount"></span></span>
-                            </template>
-                            <button @click="pullTask(task.id, group.date)" style="background:none;border:1px solid var(--rule-2);border-radius:3px;color:var(--ink-3);cursor:pointer;font-size:10px;padding:1px 6px;flex-shrink:0;line-height:1.6" title="Traer a hoy" @mouseenter="$el.style.color='var(--ink)';$el.style.borderColor='var(--ink-3)'" @mouseleave="$el.style.color='var(--ink-3)';$el.style.borderColor='var(--rule-2)'">→ Today</button>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </div>
-
-            </div>
-          </template>
-        </div>
-      </div>
-
-    </template>
 
     <!-- Plans view -->
     <template x-if="view === 'plans' && !selectedSession">
@@ -2187,340 +2154,6 @@
       </div>
     </template>
 
-    <!-- Notes view -->
-    <template x-if="view === 'notes' && !selectedSession">
-      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
-        <div class="topbar">
-          <span class="topbar-title" @click="selectedNote=null;noteEditing=false;noteCreating=false" style="cursor:pointer" title="Back to Journal">Journal</span>
-          <input class="search-input" type="text" placeholder="Search journal…" x-model="noteSearch" style="font-size:12px;width:200px;padding:4px 10px" />
-          <span style="font-size:11px;color:var(--ink-3)" x-show="personalNotes.length>0" x-text="personalNotes.length + ' entries'"></span>
-          <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
-            <template x-if="selectedNote && noteEditing">
-              <div style="display:flex;align-items:center;gap:8px">
-                <span class="save-msg" x-show="noteMsg==='Saved'" x-text="noteMsg"></span>
-                <span class="err-msg" x-show="noteMsg && noteMsg!=='Saved'" x-text="noteMsg"></span>
-                <button class="btn btn-sm btn-outline" @click="noteEditing=false">Cancelar</button>
-                <button class="btn btn-primary btn-sm" @click="savePersonalNote()" :disabled="noteSaving" x-text="noteSaving?'Guardando…':'Guardar'"></button>
-              </div>
-            </template>
-            <template x-if="selectedNote && !noteEditing">
-              <div style="display:flex;align-items:center;gap:8px">
-                <button class="btn btn-sm btn-outline" @click="addNoteTask(selectedNote.title, selectedNote)" title="Añadir título de nota como tarea de hoy">+ Hoy</button>
-                <button class="btn btn-sm btn-outline" @click="noteEditing=true;noteTitleDraft=selectedNote.title;noteBodyDraft=selectedNote.content;noteTagsDraft=(selectedNote.tags||[]).join(', ')">Editar</button>
-                <span class="save-msg" x-show="noteExportMsg || noteShareMsg" x-text="noteExportMsg || noteShareMsg"></span>
-                <!-- ⋮ dropdown -->
-                <div style="position:relative">
-                  <button class="btn btn-sm" style="background:var(--canvas-2);color:var(--ink);border:1px solid var(--rule);padding:4px 10px;display:flex;align-items:center" @click="noteDropOpen=!noteDropOpen" @click.outside="noteDropOpen=false" title="More options">
-                    <svg width="3" height="15" viewBox="0 0 3 15" fill="currentColor"><circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="7.5" r="1.5"/><circle cx="1.5" cy="13.5" r="1.5"/></svg>
-                  </button>
-                  <div x-show="noteDropOpen" x-transition style="position:absolute;top:calc(100% + 4px);right:0;background:var(--canvas,#fff);border:1px solid var(--rule);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:50;min-width:180px;overflow:hidden">
-                    <button class="export-drop-item" @click="copyNoteMd(); noteDropOpen=false">Copy MD</button>
-                    <button class="export-drop-item" @click="shareNote(); noteDropOpen=false" :disabled="!!noteShareMsg"><span x-text="noteShareMsg || 'Publish to Gist'"></span></button>
-                    <button class="export-drop-item" @click="navigator.clipboard.writeText(location.origin+location.pathname+'#/note/'+selectedNote.path); noteDropOpen=false">Copy local link</button>
-                    <div style="height:1px;background:var(--rule);margin:4px 0"></div>
-                    <div style="padding:4px 14px 2px;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">Move to</div>
-                    <button class="export-drop-item" @click="movePersonalNote(''); noteDropOpen=false">/ root</button>
-                    <template x-for="f in noteAllFolders().filter(f=>f!==(selectedNote.folder??''))" :key="f">
-                      <button class="export-drop-item" @click="movePersonalNote(f); noteDropOpen=false" x-text="'/ '+f"></button>
-                    </template>
-                    <div style="height:1px;background:var(--rule);margin:4px 0"></div>
-                    <button class="export-drop-item" style="color:var(--red)" @click="deletePersonalNote(); noteDropOpen=false">Delete note</button>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <button class="btn btn-primary btn-sm" @click="openNewNote()">+ New note</button>
-          </div>
-        </div>
-        <span class="section-sub">Your notepad — not visible to Claude</span>
-
-        <!-- New note form -->
-        <template x-if="noteCreating">
-          <div style="padding:16px 20px;border-bottom:1px solid var(--rule);background:var(--canvas-2)">
-            <input class="settings-input" type="text" placeholder="Note title…" x-model="noteNewTitle" style="width:100%;margin-bottom:8px;font-size:13px" @keydown.enter="createPersonalNote()" x-init="$nextTick(()=>$el.focus())" />
-            <div style="position:relative">
-              <div style="display:flex;gap:8px;margin-bottom:8px">
-              <input class="settings-input" type="text" placeholder="Tags (bug, idea, trabajo)…" x-model="noteNewTags" style="flex:1;font-size:12px" />
-              <select class="filter-select" x-model="noteNewFolder" style="font-size:12px;min-width:100px">
-                <option value="">/ root</option>
-                <template x-for="f in noteAllFolders()" :key="f">
-                  <option :value="f" x-text="'/ '+f"></option>
-                </template>
-              </select>
-            </div>
-            <textarea class="settings-input" placeholder="Content (optional)…" x-model="noteNewBody" rows="3" style="width:100%;resize:vertical;font-size:12px;font-family:inherit"></textarea>
-              <template x-if="noteFromClipboard">
-                <span style="position:absolute;top:6px;right:8px;font-size:10px;background:var(--canvas);border:1px solid var(--rule-2);border-radius:3px;padding:1px 5px;color:var(--ink-3);pointer-events:none">from clipboard</span>
-              </template>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
-              <button class="btn btn-sm btn-outline" @click="noteCreating=false;noteFromClipboard=false">Cancelar</button>
-              <button class="btn btn-primary btn-sm" @click="createPersonalNote()" :disabled="noteSaving||!noteNewTitle.trim()">Crear</button>
-            </div>
-          </div>
-        </template>
-
-        <div style="flex:1;overflow:hidden;">
-          <template x-if="personalNotesLoading"><div class="loading"><div class="spinner"></div> Loading…</div></template>
-          <template x-if="!personalNotesLoading && noteClaudeInstalled === false">
-            <div style="margin:12px 20px;padding:10px 14px;background:var(--canvas-2);border:1px solid var(--rule);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-              <div>
-                <div style="font-size:12px;font-weight:600;margin-bottom:2px">Claude doesn't know about Notes yet</div>
-                <div style="font-size:11px;color:var(--ink-3)">Add one instruction to your CLAUDE.md so Claude can save notes when you ask.</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-                <span x-show="noteSetupMsg" x-text="noteSetupMsg" style="font-size:11px;color:var(--green)"></span>
-                <button class="btn btn-primary btn-sm" @click="setupClaudeNotes()" :disabled="!!noteSetupMsg">Set up</button>
-              </div>
-            </div>
-          </template>
-          <template x-if="!personalNotesLoading">
-            <div class="memory-layout">
-              <div class="memory-sidebar" :style="'width:'+sidebarW+'px'">
-                <!-- Scratch — always pinned at top -->
-                <div class="plan-row scratch-row" :class="{active: scratchActive}" @click="scratchActive=true;selectedNote=null;noteEditing=false;window.location.hash=''">
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <span style="font-size:11px;opacity:.7">⚡</span>
-                    <span style="font-size:12.5px;font-weight:500">Scratch</span>
-                    <span style="font-size:10px;color:var(--ink-3);margin-left:2px">session only</span>
-                  </div>
-                  <div x-show="scratchContent.length > 0" style="font-size:10px;color:var(--ink-3)" x-text="scratchContent.slice(0,40) + (scratchContent.length>40?'…':'')"></div>
-                </div>
-                <div style="border-top:1px solid var(--rule)"></div>
-                <!-- Folder nav: at root show folders + create; inside folder show back -->
-                <template x-if="noteFolderPath === ''">
-                  <div>
-                    <template x-for="f in noteAllFolders()" :key="f">
-                      <div class="note-folder-row" @click="if(noteRenamingFolder!==f){noteFolderPath=f;selectedNote=null;scratchActive=false;window.location.hash='#/notes/folder/'+f}">
-                        <template x-if="noteRenamingFolder !== f">
-                          <span class="note-folder-icon">▶</span>
-                        </template>
-                        <template x-if="noteRenamingFolder === f">
-                          <input class="settings-input" style="flex:1;font-size:11px;padding:2px 5px;margin-right:4px" x-model="noteRenameFolderDraft"
-                            @click.stop
-                            x-init="$nextTick(()=>$el.focus())"
-                            @keydown.enter.stop="renameFolderConfirm(f)"
-                            @keydown.escape.stop="noteRenamingFolder=null;noteRenameFolderDraft=''" />
-                        </template>
-                        <template x-if="noteRenamingFolder !== f">
-                          <span class="note-folder-name" x-text="f"></span>
-                        </template>
-                        <template x-if="noteRenamingFolder !== f">
-                          <span class="note-folder-count" x-text="personalNotes.filter(n=>(n.folder??'')===f).length"></span>
-                        </template>
-                        <template x-if="noteRenamingFolder !== f">
-                          <span style="font-size:10px;color:var(--ink-3);padding:0 2px;opacity:0;transition:opacity .15s" class="note-folder-rename-btn"
-                            @click.stop="noteRenamingFolder=f;noteRenameFolderDraft=f" title="Rename">✎</span>
-                        </template>
-                        <template x-if="noteRenamingFolder !== f">
-                          <span style="font-size:10px;color:var(--ink-3);padding:0 1px;opacity:0;transition:opacity .15s" class="note-folder-delete-btn"
-                            @click.stop="deletingFolder=f" title="Delete folder">✕</span>
-                        </template>
-                        <template x-if="noteRenamingFolder === f">
-                          <button class="btn btn-sm btn-primary" style="padding:1px 7px;font-size:11px" @click.stop="renameFolderConfirm(f)">OK</button>
-                        </template>
-                      </div>
-                    </template>
-                    <div class="note-folder-create-row">
-                      <template x-if="!noteCreatingFolder">
-                        <span class="note-folder-add" @click="noteCreatingFolder=true">+ New folder</span>
-                      </template>
-                      <template x-if="noteCreatingFolder">
-                        <div style="display:flex;gap:4px;padding:4px 10px">
-                          <input class="settings-input" style="flex:1;font-size:11px;padding:3px 6px" x-model="newFolderName" placeholder="folder name…" x-init="$nextTick(()=>$el.focus())" @keydown.enter="createFolder()" @keydown.escape="noteCreatingFolder=false;newFolderName=''" />
-                          <button class="btn btn-sm btn-primary" style="padding:2px 8px;font-size:11px" @click="createFolder()">Create</button>
-                        </div>
-                      </template>
-                    </div>
-                    <template x-if="noteAllFolders().length > 0">
-                      <div style="border-top:1px solid var(--rule);margin:2px 0"></div>
-                    </template>
-                  </div>
-                </template>
-                <template x-if="noteFolderPath !== ''">
-                  <div class="note-folder-back" @click="noteFolderPath='';selectedNote=null;window.location.hash=''">
-                    <span style="color:var(--blue)">← All notes</span>
-                    <span style="color:var(--ink-3)">&nbsp;/&nbsp;</span>
-                    <span style="font-weight:500" x-text="noteFolderPath"></span>
-                  </div>
-                </template>
-                <!-- Tag filter (scoped to current folder) -->
-                <template x-if="noteAllTags().length > 0">
-                  <div class="note-tag-filter" @click.window="noteTagMenu=null;noteTagRenaming=false">
-                    <template x-for="t in noteAllTags()" :key="t.tag">
-                      <span class="note-tag-chip-wrap" style="position:relative;display:inline-flex;align-items:center">
-                        <span class="note-tag-chip" :class="{active: noteTagFilter.includes(t.tag)}"
-                          @click="noteTagFilter.includes(t.tag) ? noteTagFilter.splice(noteTagFilter.indexOf(t.tag),1) : noteTagFilter.push(t.tag)"
-                          x-text="t.tag + ' (' + t.count + ')'"></span>
-                        <span class="note-tag-mgmt-btn" @click.stop="noteTagMenu===t.tag ? noteTagMenu=null : (noteTagMenu=t.tag, noteTagRenameDraft=t.tag)" title="Manage tag">⋮</span>
-                        <template x-if="noteTagMenu === t.tag">
-                          <div class="note-tag-menu" @click.stop>
-                            <template x-if="!noteTagRenaming">
-                              <div>
-                                <div class="note-tag-menu-item" @click="noteTagRenaming=true;$nextTick(()=>$refs['tagRenameInput_'+t.tag]?.focus())">Rename…</div>
-                                <div class="note-tag-menu-item note-tag-menu-danger" @click="deleteTag(t.tag)">Delete from all notes</div>
-                              </div>
-                            </template>
-                            <template x-if="noteTagRenaming">
-                              <div style="display:flex;gap:4px;padding:2px">
-                                <input class="settings-input" style="font-size:11px;padding:2px 5px;width:100px"
-                                  x-model="noteTagRenameDraft"
-                                  :ref="'tagRenameInput_'+t.tag"
-                                  x-init="$nextTick(()=>$el.focus())"
-                                  @keydown.enter="renameTag(t.tag, noteTagRenameDraft)"
-                                  @keydown.escape="noteTagRenaming=false" />
-                                <button class="btn btn-sm btn-primary" style="padding:1px 6px;font-size:11px" @click="renameTag(t.tag, noteTagRenameDraft)">OK</button>
-                              </div>
-                            </template>
-                          </div>
-                        </template>
-                      </span>
-                    </template>
-                  </div>
-                </template>
-                <!-- Empty state when no notes exist -->
-                <template x-if="personalNotes.length === 0 && !noteSearch">
-                  <div style="padding:16px 12px;color:var(--ink-4);font-size:12px;line-height:1.5">No notes yet.<br>Ask Claude to <em>"save this as a note"</em> during any conversation.</div>
-                </template>
-                <!-- Empty search state -->
-                <template x-if="personalNotes.length > 0 && noteFolderNotes().length === 0 && noteSearch">
-                  <div style="padding:16px 12px;color:var(--ink-4);font-size:12px">No notes match "<span x-text="noteSearch"></span>"</div>
-                </template>
-                <!-- Note list (scoped to current folder) -->
-                <template x-for="n in noteFolderNotes()" :key="n.path">
-                  <div class="plan-row" :class="{active: selectedNote?.path === n.path}" @click="selectedNote=n;scratchActive=false;noteEditing=false;window.location.hash='#/note/'+n.path" style="position:relative" x-data="{rowHover:false}" @mouseenter="rowHover=true" @mouseleave="rowHover=false">
-                    <div class="plan-row-title" style="display:flex;align-items:center;gap:4px">
-                      <span x-text="n.title" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-                      <span @click.stop="selectedNote=n;togglePinNote()" :title="n.pinned ? 'Unpin' : 'Pin'" :style="'font-size:10px;line-height:1;cursor:pointer;flex-shrink:0;transition:opacity .15s;' + (n.pinned ? 'opacity:1' : (rowHover ? 'opacity:.4' : 'opacity:0'))">📌</span>
-                    </div>
-                    <div class="plan-row-meta">
-                      <span x-text="formatDate(n.modified)"></span>
-                      <template x-if="noteSearch && n.folder"><span style="color:var(--ink-3);font-size:10px" x-text="'/' + n.folder"></span></template>
-                      <template x-if="n.session && n.session.length>=32"><span style="color:var(--blue);font-size:10px">session</span></template>
-                    </div>
-                    <template x-if="(n.tags||[]).length > 0">
-                      <div class="note-row-tags">
-                        <template x-for="tag in n.tags" :key="tag">
-                          <span class="note-row-tag" x-text="tag" @click.stop="noteTagFilter.includes(tag) ? noteTagFilter.splice(noteTagFilter.indexOf(tag),1) : noteTagFilter.push(tag)"></span>
-                        </template>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </div>
-              <div class="resize-handle" @mousedown.prevent="startResize($event)"></div>
-              <div class="memory-detail">
-                <!-- Scratch detail -->
-                <template x-if="scratchActive">
-                  <div style="display:flex;flex-direction:column;height:100%;gap:10px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-                      <span style="font-size:11px;color:var(--ink-3)">⚡ Not saved · cleared on page reload</span>
-                      <div style="display:flex;gap:8px">
-                        <button class="btn btn-sm btn-outline" @click="scratchContent='';sessionStorage.removeItem('cs:scratch')" x-show="scratchContent.length>0">Clear</button>
-                        <button class="btn btn-primary btn-sm" @click="promoteScratch()" :disabled="!scratchContent.trim()">Save as note…</button>
-                      </div>
-                    </div>
-                    <textarea class="settings-input" x-model="scratchContent" @input="sessionStorage.setItem('cs:scratch',scratchContent)" style="flex:1;resize:none;font-family:monospace;font-size:12px;min-height:0;width:100%" placeholder="Scratch pad — nothing here is persisted. Use ↑ Save as note to keep it."></textarea>
-                  </div>
-                </template>
-                <template x-if="!scratchActive && !selectedNote">
-                  <div style="padding:24px;max-width:380px">
-                    <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink)">Your personal notepad</div>
-                    <div style="font-size:12px;color:var(--ink-3);margin-bottom:16px;line-height:1.6">Notes are <strong>for you</strong>, not for Claude. He won't read them as context — they're yours to capture, review and revisit.</div>
-                    <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Capture</div>
-                    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Save this as a note"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Save this as a TIL in my notes"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Add this decision to my notes"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Save this in my <em>project</em> notes folder"</code>
-                    </div>
-                    <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Organise</div>
-                    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Tag my last note as <em>bug</em> and <em>auth</em>"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Move the note about X to the <em>project</em> folder"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Pin my runbook note"</code>
-                    </div>
-                    <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Retrieve &amp; act</div>
-                    <div style="display:flex;flex-direction:column;gap:5px">
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Show me my last note"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"What notes do I have tagged <em>bug</em>?"</code>
-                      <code style="font-size:11px;background:var(--canvas-2);border:1px solid var(--rule);padding:3px 7px;border-radius:4px;display:block">"Add the first step of my deploy note to today's tasks"</code>
-                    </div>
-                  </div>
-                </template>
-                <template x-if="selectedNote && !noteEditing">
-                  <div>
-                    <div class="memory-detail-title" x-html="noteSearch ? selectedNote.title.replace(new RegExp(noteSearch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),'<mark>$&</mark>') : selectedNote.title"></div>
-                    <div class="memory-detail-meta">
-                      <span style="font-size:11px;color:var(--ink-3)" x-text="formatDate(selectedNote.modified)"></span>
-                      <template x-if="!noteRenamingFile">
-                        <span style="display:inline-flex;align-items:center;gap:3px">
-                          <span style="font-size:11px;color:var(--ink-3)" :title="selectedNote.path" x-text="selectedNote.filename"></span>
-                          <span style="font-size:11px;color:var(--ink-3);cursor:pointer;opacity:.5;transition:opacity .15s" @mouseenter="$el.style.opacity=1" @mouseleave="$el.style.opacity=.5" @click="noteRenamingFile=true;noteFilenameDraft=selectedNote.filename" title="Rename file">✎</span>
-                        </span>
-                      </template>
-                      <template x-if="noteRenamingFile">
-                        <span style="display:inline-flex;align-items:center;gap:4px">
-                          <input type="text" x-model="noteFilenameDraft" @keydown.enter="renameNoteFile()" @keydown.escape="noteRenamingFile=false" style="font-size:11px;padding:1px 5px;border:1px solid var(--rule-2);border-radius:3px;background:var(--canvas);color:var(--ink);width:220px" x-init="$nextTick(()=>$el.focus())" />
-                          <button class="btn btn-sm btn-primary" style="padding:1px 7px;font-size:11px" @click="renameNoteFile()">OK</button>
-                          <button class="btn btn-sm btn-outline" style="padding:1px 7px;font-size:11px" @click="noteRenamingFile=false">✕</button>
-                        </span>
-                      </template>
-                      <template x-if="selectedNote.session && selectedNote.session.length >= 32">
-                        <span style="font-size:11px;color:var(--blue);cursor:pointer" @click="openSessionById(selectedNote.session)" x-text="'→ Session ' + selectedNote.session.slice(0,8) + '…'"></span>
-                      </template>
-                    </div>
-                    <template x-if="(selectedNote.tags||[]).length > 0">
-                      <div style="display:flex;gap:5px;flex-wrap:wrap;padding:0 20px 10px">
-                        <template x-for="tag in selectedNote.tags" :key="tag">
-                          <span class="note-tag-chip active" style="cursor:pointer" @click="noteTagFilter.includes(tag) ? noteTagFilter.splice(noteTagFilter.indexOf(tag),1) : noteTagFilter.push(tag)" x-text="tag"></span>
-                        </template>
-                      </div>
-                    </template>
-                    <div class="memory-content md-content" @click="handleNoteLinkClick($event)" x-html="selectedNote.content ? renderNotesMd(selectedNote.content) : '<span style=\'color:var(--ink-3)\'>Empty note. Click Edit to add content.</span>'"></div>
-                    <template x-if="noteBacklinks(selectedNote).length > 0">
-                      <div class="note-backlinks">
-                        <span class="note-backlinks-label">Referenced by</span>
-                        <template x-for="bl in noteBacklinks(selectedNote)" :key="bl.filename">
-                          <span class="note-backlink-chip" @click="selectedNote=bl;noteEditing=false;window.location.hash='#/note/'+bl.path" x-text="bl.title"></span>
-                        </template>
-                      </div>
-                    </template>
-                    <template x-if="noteRelated(selectedNote).length > 0">
-                      <div class="note-backlinks">
-                        <span class="note-backlinks-label">Related</span>
-                        <template x-for="rn in noteRelated(selectedNote)" :key="rn.filename">
-                          <span class="note-backlink-chip note-related-chip" @click="selectedNote=rn;noteEditing=false;window.location.hash='#/note/'+rn.path" x-text="rn.title"></span>
-                        </template>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-                <template x-if="selectedNote && noteEditing">
-                  <div style="display:flex;flex-direction:column;height:100%;gap:10px;position:relative">
-                    <input class="settings-input" type="text" x-model="noteTitleDraft" style="font-size:14px;font-weight:600;width:100%" />
-                    <input class="settings-input" type="text" x-model="noteTagsDraft" placeholder="Tags (comma separated: bug, idea, trabajo)…" style="font-size:12px;width:100%" />
-                    <div style="position:relative;flex:1;display:flex;flex-direction:column">
-                      <textarea class="settings-input note-body-ta" x-model="noteBodyDraft" @input="noteEditorInput($event)" @keydown="noteEditorKeydown($event)" @blur="setTimeout(()=>noteAutocomplete.visible=false,150)" style="flex:1;resize:none;font-family:monospace;font-size:12px;min-height:300px;width:100%"></textarea>
-                      <template x-if="noteAutocomplete.visible">
-                        <div class="note-autocomplete">
-                          <template x-for="(n, i) in noteAutocomplete.results" :key="n.filename">
-                            <div class="note-autocomplete-item" :class="{active: i===noteAutocomplete.pos}" @mousedown.prevent="noteAutocompleteSelect(n)">
-                              <span class="note-ac-hash">#</span><span x-text="n.filename.replace(/\.md$/,'').replace(/^\d{4}-\d{2}-\d{2}-/,'')"></span>
-                              <span class="note-ac-title" x-text="n.title"></span>
-                            </div>
-                          </template>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </template>
 
     <!-- Plugins view -->
     <template x-if="view === 'plugins' && !selectedSession">
@@ -3593,96 +3226,6 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
       </div>
     </template>
 
-    <!-- URL to Markdown widget -->
-    <template x-if="view === 'webmd' && !selectedSession">
-      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
-        <div class="topbar">
-          <span class="topbar-title">URL to MD</span>
-          <span style="font-size:11px;color:var(--ink-3)" x-show="webmdItems.length>0" x-text="webmdItems.length + ' saved'"></span>
-        </div>
-        <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px">
-
-          <!-- Input area -->
-          <div style="display:flex;gap:8px">
-            <input type="text" x-model="webmdUrl" placeholder="https://example.com/article" @keydown.enter="fetchWebmd()"
-              style="flex:1;font-size:13px;padding:6px 10px;border:1px solid var(--rule-2);border-radius:6px;background:var(--white);color:var(--ink)">
-            <button class="btn btn-primary btn-sm" @click="fetchWebmd()" :disabled="webmdLoading||!webmdUrl.trim()">
-              <span x-show="!webmdLoading">Convertir</span>
-              <span x-show="webmdLoading" style="display:flex;align-items:center;gap:5px"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span>Cargando…</span>
-            </button>
-          </div>
-          <!-- Options -->
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none">
-              <input type="checkbox" x-model="webmdOptTitle" @change="localStorage.setItem('cs:webmdOptTitle',webmdOptTitle)">
-              Include Title
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none">
-              <input type="checkbox" x-model="webmdOptLinks" @change="localStorage.setItem('cs:webmdOptLinks',webmdOptLinks)">
-              Ignore Links
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none">
-              <input type="checkbox" x-model="webmdOptClean" @change="localStorage.setItem('cs:webmdOptClean',webmdOptClean)">
-              Clean / Filter
-            </label>
-          </div>
-          <div x-show="webmdError" style="font-size:12px;color:var(--red);padding:6px 10px;background:rgba(220,50,50,.07);border-radius:5px" x-text="webmdError"></div>
-
-          <!-- Result -->
-          <template x-if="webmdResult">
-            <div style="display:flex;flex-direction:column;gap:10px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-                <div style="font-size:13px;font-weight:600;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="webmdResult.title"></div>
-                <div style="display:flex;gap:6px;flex-shrink:0">
-                  <button class="btn btn-outline btn-sm" @click="webmdShowRaw=!webmdShowRaw" x-text="webmdShowRaw ? 'Ver preview' : 'Ver raw'"></button>
-                  <button class="btn btn-outline btn-sm" @click="copyWebmd()" title="Copiar Markdown">
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <rect x="5" y="5" width="9" height="9" rx="1"/>
-                      <path d="M3 11H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1"/>
-                    </svg>
-                    Copiar MD
-                  </button>
-                  <button class="btn btn-primary btn-sm" @click="saveWebmd()">Guardar</button>
-                </div>
-              </div>
-              <!-- Raw view -->
-              <template x-if="webmdShowRaw">
-                <pre style="background:var(--canvas);border:1px solid var(--rule);border-radius:6px;padding:12px;font-size:12px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;color:var(--ink-2);margin:0;height:calc(100vh - 300px)" x-text="processedWebmd()"></pre>
-              </template>
-              <!-- Rendered view -->
-              <template x-if="!webmdShowRaw">
-                <div class="markdown-body" style="font-size:13px;line-height:1.6;overflow-y:auto;padding:12px;border:1px solid var(--rule);border-radius:6px;background:var(--white);flex:1;min-height:0" x-html="marked.parse(processedWebmd())"></div>
-              </template>
-            </div>
-          </template>
-
-          <!-- Saved items -->
-          <template x-if="webmdItems.length > 0">
-            <div style="border-top:1px solid var(--rule);padding-top:16px;display:flex;flex-direction:column;gap:8px">
-              <div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.05em">Guardadas</div>
-              <template x-for="item in webmdItems" :key="item.slug">
-                <div style="padding:10px 12px;border:1px solid var(--rule);border-radius:6px;background:var(--white);display:flex;align-items:center;gap:10px">
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="item.title"></div>
-                    <div style="font-size:11px;color:var(--ink-3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="item.url"></div>
-                    <div style="font-size:11px;color:var(--ink-3);margin-top:1px" x-text="new Date(item.savedAt).toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})"></div>
-                  </div>
-                  <div style="display:flex;gap:5px;flex-shrink:0">
-                    <button class="btn btn-outline btn-sm" @click="webmdResult={title:item.title,markdown:item.markdown};webmdUrl=item.url;webmdShowRaw=false">Ver</button>
-                    <button class="btn btn-outline btn-sm" @click="navigator.clipboard.writeText(item.markdown)" title="Copiar">
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M3 11H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1"/></svg>
-                    </button>
-                    <button class="btn btn-outline btn-sm" style="color:var(--red)" @click="deleteWebmd(item.slug)">×</button>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </template>
-          <div x-show="webmdItemsLoading" class="loading"><div class="spinner"></div> Cargando…</div>
-
-        </div>
-      </div>
-    </template>
 
     <!-- Commands / Skills / Config -->
     <template x-if="(view === 'commands' || view === 'skills' || view === 'config' || view === 'instructions' || view === 'permissions' || view === 'hooks') && !selectedSession">
@@ -4468,16 +4011,6 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
                   </div>
                   <template x-if="config.settings?.statusLine?.command"><div class="config-row"><div class="config-key">Status line</div><div class="config-val" x-text="config.settings.statusLine.command"></div></div></template>
                   <div class="config-row">
-                    <div class="config-key">Show Today</div>
-                    <div class="config-val">
-                      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                        <input type="checkbox" x-model="showToday" @change="localStorage.setItem('cs:showToday', showToday); if(!showToday && view==='today') view='sessions'; if(!showToday && defaultView==='today') { defaultView=''; localStorage.setItem('cs:defaultView','') }" />
-                        <span style="font-size:12px;color:var(--ink-2)" x-text="showToday ? 'Visible' : 'Hidden'"></span>
-                      </label>
-                      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Show the Today task list in the navigation.</div>
-                    </div>
-                  </div>
-                  <div class="config-row">
                     <div class="config-key">Show Analytics</div>
                     <div class="config-val">
                       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -4485,16 +4018,6 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
                         <span style="font-size:12px;color:var(--ink-2)" x-text="showInsights ? 'Visible' : 'Hidden'"></span>
                       </label>
                       <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Show Analytics (Insights) in the Widgets section.</div>
-                    </div>
-                  </div>
-                  <div class="config-row">
-                    <div class="config-key">Show Journal</div>
-                    <div class="config-val">
-                      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                        <input type="checkbox" x-model="showNotes" @change="localStorage.setItem('cs:showNotes', showNotes); if(!showNotes && view==='notes') view='sessions'; if(!showNotes && defaultView==='notes') { defaultView=''; localStorage.setItem('cs:defaultView','') }" />
-                        <span style="font-size:12px;color:var(--ink-2)" x-text="showNotes ? 'Visible' : 'Hidden'"></span>
-                      </label>
-                      <div style="font-size:11px;color:var(--ink-3);margin-top:3px">Show the Journal section in the navigation.</div>
                     </div>
                   </div>
                   <div class="config-row">
@@ -4514,9 +4037,7 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
                         <option value="">Remember last section</option>
                         <template x-if="showInsights"><option value="dashboard">Analytics</option></template>
                         <option value="sessions">Sessions</option>
-                        <template x-if="showToday"><option value="today">Today</option></template>
                         <option value="plans">Plans</option>
-                        <template x-if="showNotes"><option value="notes">Journal</option></template>
                         <option value="memory">Memory</option>
                         <option value="agents">Agents</option>
                       </select>
@@ -4661,29 +4182,6 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
                   </div>
                 </div>
 
-                <div class="config-section">
-                  <div class="config-section-title">Integrations</div>
-                  <div class="config-row">
-                    <div class="config-key">Notes</div>
-                    <div class="config-val" style="flex:1">
-                      <div style="display:flex;align-items:center;gap:10px">
-                        <template x-if="noteClaudeInstalled">
-                          <span style="font-size:12px;color:var(--green);display:flex;align-items:center;gap:4px">
-                            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2 7 5 10 11 3"/></svg>
-                            Enabled
-                          </span>
-                        </template>
-                        <template x-if="!noteClaudeInstalled">
-                          <div style="display:flex;align-items:center;gap:8px">
-                            <span x-show="noteSetupMsg" x-text="noteSetupMsg" style="font-size:12px;color:var(--green)"></span>
-                            <button class="btn btn-primary btn-sm" @click="setupClaudeNotes()" :disabled="!!noteSetupMsg">Set up</button>
-                          </div>
-                        </template>
-                      </div>
-                      <div style="font-size:11px;color:var(--ink-3);margin-top:4px">Adds an instruction to your CLAUDE.md so Claude can save notes when you ask. Notes are your personal notepad — Claude won't read them as context.</div>
-                    </div>
-                  </div>
-                </div>
 
               </div>
             </div>
@@ -5458,31 +4956,6 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
     </template>
 
   </div>
-
-  <!-- Delete folder modal -->
-  <template x-if="deletingFolder !== null">
-    <div class="memory-new-modal" @click.self="deletingFolder=null">
-      <div class="memory-new-form" style="width:360px">
-        <h3>Borrar carpeta "<span x-text="deletingFolder"></span>"</h3>
-        <template x-if="personalNotes.filter(n=>(n.folder??'')===deletingFolder).length === 0">
-          <p style="font-size:12px;color:var(--ink-2);line-height:1.5;margin-bottom:20px">La carpeta está vacía. ¿Confirmas el borrado?</p>
-        </template>
-        <template x-if="personalNotes.filter(n=>(n.folder??'')===deletingFolder).length > 0">
-          <p style="font-size:12px;color:var(--ink-2);line-height:1.5;margin-bottom:20px">
-            Contiene <strong x-text="personalNotes.filter(n=>(n.folder??'')===deletingFolder).length"></strong> nota(s).
-            ¿Borras también las notas o las dejas sueltas (sin carpeta)?
-          </p>
-        </template>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn btn-sm btn-outline" @click="deletingFolder=null">Cancelar</button>
-          <template x-if="personalNotes.filter(n=>(n.folder??'')===deletingFolder).length > 0">
-            <button class="btn btn-sm" style="background:var(--canvas-2,#f5f5f5);border:1px solid var(--rule);color:var(--ink)" @click="deleteFolderConfirm('orphan')">Soltar notas</button>
-          </template>
-          <button class="btn btn-sm" style="background:var(--red-dim,#3a1a1a);color:var(--red);border:1px solid var(--red)" @click="deleteFolderConfirm('delete')" x-text="personalNotes.filter(n=>(n.folder??'')===deletingFolder).length > 0 ? 'Borrar todo' : 'Borrar carpeta'"></button>
-        </div>
-      </div>
-    </div>
-  </template>
 
   <!-- New Memory modal -->
   <template x-if="memoryNewModal">

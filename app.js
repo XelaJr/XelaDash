@@ -69,7 +69,6 @@ function app() {
         deletingSession: false,
         snapshottingSession: false,
         exportDropOpen: false,
-        noteDropOpen: false,
         planDropOpen: false,
         planEditing: false,
         planBodyDraft: '',
@@ -82,58 +81,8 @@ function app() {
         planExportMsg: '',
         planExportOpen: false,
         planShareMsg: '',
-        noteShareMsg: '',
-        todayData: null,
-        todayLoading: false,
-        todayNewTask: '',
-        todaySaveTimer: null,
-        todayCopied: false,
-        personalNotes: [],
-        personalNotesLoading: false,
-        selectedNote: null,
-        noteEditing: false,
-        noteTitleDraft: '',
-        noteBodyDraft: '',
-        noteMsg: '',
-        noteExportMsg: '',
-        noteSaving: false,
-        noteRenamingFile: false,
-        noteFilenameDraft: '',
-        noteSearch: '',
-        postponeMenuTask: '',
-        editingTaskId: '',
-        taskEditText: '',
-        showCliRef: false,
-        cliRefTab: 'slash',
-        upcomingTasks: [],
-        noteCreating: false,
-        noteNewTitle: '',
-        noteNewBody: '',
-        noteClaudeInstalled: null,
-        noteSetupMsg: '',
-        noteAutocomplete: {
-            visible: false,
-            query: '',
-            results: [],
-            pos: 0
-        },
-        noteFromClipboard: false,
         scratchContent: sessionStorage.getItem('cs:scratch') || '',
         scratchActive: false,
-        noteTagFilter: [],
-        noteTagsDraft: '',
-        noteNewTags: '',
-        noteFolderPath: '',
-        noteNewFolder: '',
-        noteCreatingFolder: false,
-        newFolderName: '',
-        noteFolders: [],
-        noteRenamingFolder: null,
-        noteRenameFolderDraft: '',
-        deletingFolder: null,
-        noteTagMenu: null,
-        noteTagRenaming: false,
-        noteTagRenameDraft: '',
         sidebarW: parseInt(localStorage.getItem('cm:sidebarW') || '260'),
         navWidth: parseInt(localStorage.getItem('cs:navWidth') || '224'),
         _navDragging: false,
@@ -385,6 +334,8 @@ function app() {
         templateCopied: null,
         insights: null,
         insightsLoading: false,
+        usageWindows: null,
+        usageWindowsLoading: false,
         budgetMonthly: 0,
         budgetMonthlyDraft: '',
         budgetMsg: '',
@@ -639,22 +590,9 @@ function app() {
         sessionsTab: 'list',
         knowledgeTab: 'memory',
         setupTab: 'commands',
-        showToday: localStorage.getItem('cs:showToday') !== 'false',
         showInsights: localStorage.getItem('cs:showInsights') !== 'false',
         widgetsOpen: localStorage.getItem('cs:widgetsOpen') !== 'false',
-        showNotes: localStorage.getItem('cs:showNotes') !== 'false',
         showTemplates: localStorage.getItem('cs:showTemplates') !== 'false',
-        showWebmd: localStorage.getItem('cs:showWebmd') !== 'false',
-        webmdUrl: '',
-        webmdResult: null,
-        webmdLoading: false,
-        webmdError: '',
-        webmdShowRaw: true,
-        webmdOptTitle: localStorage.getItem('cs:webmdOptTitle') !== 'false',
-        webmdOptLinks: localStorage.getItem('cs:webmdOptLinks') === 'true',
-        webmdOptClean: localStorage.getItem('cs:webmdOptClean') === 'true',
-        webmdItems: [],
-        webmdItemsLoading: false,
         defaultView: localStorage.getItem('cs:defaultView') || '',
 
         // ── Live session monitor ──────────────────────────────
@@ -710,8 +648,6 @@ function app() {
             const savedTo = localStorage.getItem('cs:filterTo');
             const startView = savedView || this.defaultView;
             const hiddenViews = [
-                !this.showToday && 'today',
-                !this.showNotes && 'notes',
                 !this.showInsights && 'dashboard',
             ].filter(Boolean);
             if (startView && !hiddenViews.includes(startView)) this.view = startView;
@@ -722,7 +658,6 @@ function app() {
 
             this.$watch('view', v => {
                 sessionStorage.setItem('cs:view', v);
-                if (v !== 'notes' && window.location.hash.startsWith('#/note/')) window.location.hash = '';
                 if (v !== 'sessions' && window.location.hash.startsWith('#/session/')) window.location.hash = '';
             });
             this.$watch('filterProject', v => localStorage.setItem('cs:project', v));
@@ -750,36 +685,19 @@ function app() {
             this.loadCosts();
             this.loadStatus();
             this.loadInsights();
+            this.loadUsageWindows();
             // Load counts for nav badges without blocking
-            this.loadToday();
             this.loadPlans();
             this.loadAgents();
             this.loadTools();
             this.loadMemory();
-            this.loadPersonalNotes();
             this.startActivePolling();
             // Parse URL hash for direct links
             const hash = window.location.hash;
             const mSession = hash.match(/^#\/session\/([^/]+)\/([^/]+)$/);
-            const mNote = hash.match(/^#\/note\/(.+)$/);
-            const mFolder = hash.match(/^#\/notes\/folder\/(.+)$/);
             if (mSession) {
                 this.view = 'sessions';
                 await this.openSessionById(mSession[2], mSession[1]);
-            }
-            if (mFolder) {
-                this.view = 'notes';
-                this.noteFolderPath = decodeURIComponent(mFolder[1]);
-            }
-            if (mNote) {
-                const notes = await fetch('/api/notes').then(r => r.json()).catch(() => []);
-                this.personalNotes = notes;
-                const note = this.personalNotes.find(n => n.path === mNote[1]);
-                if (note) {
-                    this.view = 'notes';
-                    this.selectedNote = note;
-                    this.noteFolderPath = note.folder ?? '';
-                }
             }
             // Clear hash when closing
             this.$watch('selectedSession', v => {
@@ -788,29 +706,19 @@ function app() {
                     this.closeLiveStream();
                 }
             });
-            this.$watch('selectedNote', v => {
-                if (!v) {
-                    if (window.location.hash.startsWith('#/note/')) window.location.hash = '';
-                }
-            });
         },
 
         initView(v) {
-            if (v === 'today') {
-                this.loadToday();
-            }
             if (v === 'dashboard') {
                 this.loadStats();
                 this.loadInsights();
+                this.loadUsageWindows();
             }
             if (v === 'projects') {
                 this.loadProjects();
             }
             if (v === 'memory') {
                 this.loadMemory();
-            }
-            if (v === 'notes') {
-                this.loadPersonalNotes();
             }
             if (v === 'plans') {
                 this.loadPlans();
@@ -2032,44 +1940,6 @@ function app() {
             }, 2500);
         },
 
-        async renameNoteFile() {
-            if (!this.selectedNote) return;
-            let name = this.noteFilenameDraft.trim();
-            if (!name) return;
-            if (!name.endsWith('.md')) name += '.md';
-            if (name === this.selectedNote.filename) {
-                this.noteRenamingFile = false;
-                return;
-            }
-            const res = await fetch(`/api/notes/${this.selectedNote.path}/rename`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    newFilename: name
-                })
-            }).then(r => r.json());
-            if (res.error) {
-                alert(res.error);
-                return;
-            }
-            const idx = this.personalNotes.findIndex(n => n.path === this.selectedNote.path);
-            if (idx !== -1) this.personalNotes.splice(idx, 1, res);
-            this.selectedNote = res;
-            this.noteRenamingFile = false;
-            window.location.hash = '#/note/' + res.path;
-        },
-
-        async copyNoteMd() {
-            if (!this.selectedNote) return;
-            const md = `# ${this.selectedNote.title}\n\n${this.selectedNote.content}`;
-            await navigator.clipboard.writeText(md);
-            this.noteExportMsg = 'Copied!';
-            setTimeout(() => {
-                this.noteExportMsg = '';
-            }, 2500);
-        },
 
         async doSearch() {
             if (this.searchQuery.length < 2) {
@@ -2252,334 +2122,6 @@ function app() {
             }
         },
 
-        renderNotesMd(text) {
-            const processed = text.replace(/(^|[^&\w])#([a-zA-Z][\w-]+)/g, (match, pre, slug) => {
-                const note = this.personalNotes.find(n => {
-                    const base = n.filename.replace(/\.md$/, '');
-                    const slugPart = base.replace(/^\d{4}-\d{2}-\d{2}-/, '');
-                    return slugPart === slug || base === slug;
-                });
-                if (!note) return match;
-                return `${pre}[#${slug}](#/note/${note.path})`;
-            });
-            let html;
-            try {
-                html = marked.parse(processed);
-            } catch {
-                html = processed;
-            }
-            // Mark note-ref links so we can style/intercept them
-            html = html.replace(/href="#\/note\//g, 'class="note-ref-link" href="#/note/');
-            // Inject + buttons into paragraphs and list items
-            const btn = '<button class="para-add-task-btn" data-tooltip="Add to Today">+</button>';
-            html = html.replace(/<p>/g, `<p>${btn}`);
-            html = html.replace(/<li>/g, `<li>${btn}`);
-            // Highlight search matches in text nodes only (between > and <)
-            if (this.noteSearch) {
-                const q = this.noteSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(q, 'gi');
-                html = html.replace(/>([^<]+)</g, (_, text) => '>' + text.replace(re, '<mark>$&</mark>') + '<');
-            }
-            return html;
-        },
-
-        handleNoteLinkClick(e) {
-            const btn = e.target.closest('.para-add-task-btn');
-            if (btn) {
-                e.preventDefault();
-                const block = btn.closest('p,li');
-                const text = block ? block.innerText.replace('+', '').trim() : '';
-                if (text) this.addNoteTask(text, this.selectedNote || this.noteHovered);
-                return;
-            }
-            const a = e.target.closest('a.note-ref-link');
-            if (!a) return;
-            e.preventDefault();
-            const notepath = a.getAttribute('href').replace('#/note/', '');
-            const note = this.personalNotes.find(n => n.path === notepath);
-            if (note) {
-                this.selectedNote = note;
-                this.noteEditing = false;
-                window.location.hash = '#/note/' + note.path;
-            }
-        },
-
-        noteAllFolders() {
-            const fromNotes = this.personalNotes.map(n => n.folder ?? '').filter(Boolean);
-            return [...new Set([...this.noteFolders, ...fromNotes])].sort();
-        },
-
-        noteFolderNotes() {
-            const q = this.noteSearch.toLowerCase();
-            const filtered = this.personalNotes.filter(n => {
-                // When searching, skip folder filter to search across all notes
-                if (!q && (n.folder ?? '') !== this.noteFolderPath) return false;
-                if (this.noteTagFilter.length > 0 && !this.noteTagFilter.some(t => (n.tags || []).includes(t))) return false;
-                if (!q) return true;
-                return n.title.toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q);
-            });
-            return filtered.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-        },
-
-        async createFolder() {
-            if (!this.newFolderName.trim()) return;
-            const res = await fetch('/api/notes/folders', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: this.newFolderName.trim()
-                }),
-            }).then(r => r.json()).catch(() => null);
-            if (res?.name && !this.noteFolders.includes(res.name)) {
-                this.noteFolders.push(res.name);
-                this.noteFolders.sort();
-            }
-            this.noteCreatingFolder = false;
-            this.newFolderName = '';
-        },
-
-        async renameFolderConfirm(oldName) {
-            const newName = this.noteRenameFolderDraft.trim();
-            if (!newName || newName === oldName) {
-                this.noteRenamingFolder = null;
-                return;
-            }
-            const res = await fetch(`/api/notes/folders/${encodeURIComponent(oldName)}/rename`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    newName
-                }),
-            }).then(r => r.json()).catch(() => null);
-            if (!res?.name) {
-                alert(res?.error || 'Rename failed');
-                return;
-            }
-            // Update noteFolders list
-            const idx = this.noteFolders.indexOf(oldName);
-            if (idx !== -1) this.noteFolders.splice(idx, 1, res.name);
-            else {
-                this.noteFolders.push(res.name);
-            }
-            this.noteFolders.sort();
-            // Update folder field in all affected notes
-            for (const n of this.personalNotes) {
-                if ((n.folder ?? '') === oldName) {
-                    n.folder = res.name;
-                    n.path = res.name + '/' + n.filename;
-                }
-            }
-            if (this.noteFolderPath === oldName) this.noteFolderPath = res.name;
-            if (this.selectedNote?.folder === oldName) {
-                this.selectedNote.folder = res.name;
-                this.selectedNote.path = res.name + '/' + this.selectedNote.filename;
-            }
-            this.noteRenamingFolder = null;
-            this.noteRenameFolderDraft = '';
-        },
-
-        async deleteFolderConfirm(action) {
-            const folder = this.deletingFolder;
-            if (!folder) return;
-            const res = await fetch(`/api/notes/folders/${encodeURIComponent(folder)}?action=${action}`, {
-                method: 'DELETE',
-            }).then(r => r.json()).catch(() => null);
-            if (!res?.ok) {
-                alert(res?.error || 'Error al borrar la carpeta');
-                return;
-            }
-            this.noteFolders = this.noteFolders.filter(f => f !== folder);
-            if (action === 'orphan') {
-                for (const n of this.personalNotes) {
-                    if ((n.folder ?? '') === folder) {
-                        n.folder = '';
-                        n.path = n.filename;
-                    }
-                }
-                if (this.selectedNote?.folder === folder) {
-                    this.selectedNote.folder = '';
-                    this.selectedNote.path = this.selectedNote.filename;
-                }
-            } else {
-                this.personalNotes = this.personalNotes.filter(n => (n.folder ?? '') !== folder);
-                if (this.selectedNote?.folder === folder) {
-                    this.selectedNote = null;
-                    this.noteEditing = false;
-                }
-            }
-            if (this.noteFolderPath === folder) {
-                this.noteFolderPath = '';
-                this.selectedNote = null;
-            }
-            this.deletingFolder = null;
-        },
-
-        noteAllTags() {
-            const counts = {};
-            const scoped = this.personalNotes.filter(n => (n.folder ?? '') === this.noteFolderPath);
-            for (const n of scoped) {
-                for (const t of (n.tags || [])) counts[t] = (counts[t] || 0) + 1;
-            }
-            return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({
-                tag,
-                count
-            }));
-        },
-
-        async renameTag(oldName, newName) {
-            newName = newName.trim();
-            if (!newName || newName === oldName) {
-                this.noteTagMenu = null;
-                this.noteTagRenaming = false;
-                return;
-            }
-            const res = await fetch(`/api/notes/tags/${encodeURIComponent(oldName)}/rename`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    newName
-                }),
-            }).then(r => r.json()).catch(() => null);
-            if (!res || res.error) {
-                alert(res?.error || 'Rename failed');
-                return;
-            }
-            for (const n of this.personalNotes) {
-                if ((n.tags || []).includes(oldName)) {
-                    n.tags = n.tags.map(t => t === oldName ? res.to : t);
-                }
-            }
-            if (this.noteTagFilter.includes(oldName)) {
-                this.noteTagFilter.splice(this.noteTagFilter.indexOf(oldName), 1, res.to);
-            }
-            if (this.selectedNote?.tags?.includes(oldName)) {
-                this.selectedNote.tags = this.selectedNote.tags.map(t => t === oldName ? res.to : t);
-            }
-            this.noteTagMenu = null;
-            this.noteTagRenaming = false;
-        },
-
-        async deleteTag(name) {
-            if (!confirm(`Remove tag "${name}" from all notes?`)) return;
-            const res = await fetch(`/api/notes/tags/${encodeURIComponent(name)}`, {
-                    method: 'DELETE'
-                })
-                .then(r => r.json()).catch(() => null);
-            if (!res || res.error) {
-                alert(res?.error || 'Delete failed');
-                return;
-            }
-            for (const n of this.personalNotes) {
-                if ((n.tags || []).includes(name)) n.tags = n.tags.filter(t => t !== name);
-            }
-            const fi = this.noteTagFilter.indexOf(name);
-            if (fi !== -1) this.noteTagFilter.splice(fi, 1);
-            if (this.selectedNote?.tags?.includes(name)) {
-                this.selectedNote.tags = this.selectedNote.tags.filter(t => t !== name);
-            }
-            this.noteTagMenu = null;
-        },
-
-        noteTokens(note) {
-            const STOP = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'that', 'this', 'it', 'its', 'as', 'if', 'not', 'no', 'so', 'up', 'out', 'de', 'la', 'el', 'en', 'que', 'se', 'los', 'las', 'un', 'una', 'con', 'por', 'para', 'como', 'más', 'una', 'sus', 'del', 'al', 'lo', 'le', 'les', 'nos', 'pero', 'fue', 'si', 'ya', 'también', 'este', 'esta', 'estos', 'estas', 'hay', 'una']);
-            const text = (note.title + ' ' + (note.content || '')).toLowerCase();
-            return new Set(text.match(/[a-záéíóúüñ]{3,}/g)?.filter(w => !STOP.has(w)) || []);
-        },
-
-        noteRelated(note, limit = 4) {
-            if (!note) return [];
-            const ta = this.noteTokens(note);
-            if (ta.size === 0) return [];
-            const backlinked = new Set(this.noteBacklinks(note).map(n => n.filename));
-            return this.personalNotes
-                .filter(n => n.filename !== note.filename && !backlinked.has(n.filename))
-                .map(n => {
-                    const tb = this.noteTokens(n);
-                    const shared = [...ta].filter(w => tb.has(w)).length;
-                    const score = shared / Math.sqrt(ta.size * tb.size);
-                    return {
-                        note: n,
-                        score
-                    };
-                })
-                .filter(x => x.score > 0.08)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, limit)
-                .map(x => x.note);
-        },
-
-        noteBacklinks(note) {
-            if (!note) return [];
-            const slug = note.filename.replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
-            const fullBase = note.filename.replace(/\.md$/, '');
-            return this.personalNotes.filter(n => {
-                if (n.filename === note.filename) return false;
-                return n.content && (n.content.includes('#' + slug) || n.content.includes('#' + fullBase));
-            });
-        },
-
-        noteEditorInput(e) {
-            const ta = e.target;
-            const val = ta.value;
-            const pos = ta.selectionStart;
-            // Find # trigger: look back from cursor for #word (no spaces)
-            const before = val.slice(0, pos);
-            const m = before.match(/#([a-zA-Z][\w-]*)$/);
-            if (m) {
-                const query = m[1].toLowerCase();
-                const results = this.personalNotes.filter(n => {
-                    const base = n.filename.replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
-                    return base.includes(query) || n.title.toLowerCase().includes(query);
-                }).slice(0, 6);
-                this.noteAutocomplete = {
-                    visible: results.length > 0,
-                    query: m[1],
-                    results,
-                    pos: 0
-                };
-            } else {
-                this.noteAutocomplete.visible = false;
-            }
-        },
-
-        noteEditorKeydown(e) {
-            const ac = this.noteAutocomplete;
-            if (!ac.visible) return;
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                ac.pos = Math.min(ac.pos + 1, ac.results.length - 1);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                ac.pos = Math.max(ac.pos - 1, 0);
-            } else if (e.key === 'Enter' || e.key === 'Tab') {
-                e.preventDefault();
-                this.noteAutocompleteSelect(ac.results[ac.pos]);
-            } else if (e.key === 'Escape') {
-                ac.visible = false;
-            }
-        },
-
-        noteAutocompleteSelect(note) {
-            const slug = note.filename.replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
-            const ta = document.querySelector('textarea.note-body-ta');
-            if (!ta) return;
-            const pos = ta.selectionStart;
-            const before = ta.value.slice(0, pos);
-            const after = ta.value.slice(pos);
-            const replaced = before.replace(/#([a-zA-Z][\w-]*)$/, '#' + slug);
-            this.noteBodyDraft = replaced + after;
-            this.noteAutocomplete.visible = false;
-            this.$nextTick(() => {
-                ta.focus();
-                ta.selectionStart = ta.selectionEnd = replaced.length;
-            });
-        },
 
         renderInlineCode(text) {
             const esc = text
@@ -2723,6 +2265,24 @@ function app() {
             }
         },
 
+        windowResetLabel() {
+            if (!this.usageWindows?.currentWindow) return '';
+            const end = new Date(this.usageWindows.currentWindow.end);
+            const now = new Date();
+            const diff = end - now;
+            if (diff <= 0) return 'Resetting now';
+            const h = Math.floor(diff / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            return 'Resets in ' + (h > 0 ? h + 'h ' + m + 'min' : m + 'min');
+        },
+        weeklyResetLabel() {
+            if (!this.usageWindows?.currentWeek) return '';
+            const end = new Date(this.usageWindows.currentWeek.end);
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const h = end.getHours().toString().padStart(2, '0') + ':00';
+            return 'Resets ' + days[end.getDay()] + ', ' + h;
+        },
+
         async loadTemplates() {
             if (this.templates.length > 0) return;
             this.templatesLoading = true;
@@ -2730,83 +2290,6 @@ function app() {
             this.templatesLoading = false;
         },
 
-        async loadWebmd() {
-            if (this.webmdItems.length > 0) return;
-            this.webmdItemsLoading = true;
-            this.webmdItems = await fetch('/api/webmd').then(r => r.json()).catch(() => []);
-            this.webmdItemsLoading = false;
-        },
-
-        async fetchWebmd() {
-            if (!this.webmdUrl.trim()) return;
-            this.webmdLoading = true;
-            this.webmdError = '';
-            this.webmdResult = null;
-            try {
-                const r = await fetch('/api/webmd/fetch', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        url: this.webmdUrl.trim()
-                    })
-                });
-                const data = await r.json();
-                if (!r.ok) throw new Error(data.error || 'Error desconocido');
-                this.webmdResult = data;
-            } catch (e) {
-                this.webmdError = e.message;
-            }
-            this.webmdLoading = false;
-        },
-
-        async saveWebmd() {
-            if (!this.webmdResult) return;
-            this.webmdError = '';
-            try {
-                const r = await fetch('/api/webmd/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        url: this.webmdUrl.trim(),
-                        title: this.webmdResult.title,
-                        markdown: this.processedWebmd()
-                    })
-                });
-                const entry = await r.json();
-                if (!r.ok) throw new Error(entry.error || 'Error desconocido');
-                this.webmdItems.unshift(entry);
-            } catch (e) {
-                this.webmdError = e.message;
-            }
-        },
-
-        async deleteWebmd(slug) {
-            await fetch('/api/webmd/' + slug, {
-                method: 'DELETE'
-            });
-            this.webmdItems = this.webmdItems.filter(i => i.slug !== slug);
-        },
-
-        processedWebmd() {
-            if (!this.webmdResult) return '';
-            let md = this.webmdResult.markdown;
-            if (!this.webmdOptTitle) md = md.replace(/^#[^\n]*\n+/, '');
-            if (this.webmdOptLinks) md = md.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-            if (this.webmdOptClean) {
-                md = md.replace(/!\[[^\]]*\]\([^)]*\)/g, ''); // remove images
-                md = md.replace(/^(Title:|URL:|Published:|Source:)[^\n]*\n?/gm, ''); // Jina metadata lines
-                md = md.replace(/\n{3,}/g, '\n\n').trim(); // collapse blank lines
-            }
-            return md;
-        },
-
-        copyWebmd() {
-            navigator.clipboard.writeText(this.processedWebmd()).catch(() => {});
-        },
 
         async createTemplate() {
             this.templateNew.saving = true;
@@ -2883,6 +2366,56 @@ function app() {
             this.insightsLoading = true;
             this.insights = await fetch('/api/insights' + (force ? '?refresh=1' : '')).then(r => r.json());
             this.insightsLoading = false;
+        },
+
+        async loadUsageWindows() {
+            if (this.usageWindowsLoading) return;
+            this.usageWindowsLoading = true;
+            try {
+                const r = await fetch('/api/usage-windows');
+                if (r.ok) this.usageWindows = await r.json();
+            } catch (e) { console.error('usage-windows', e); }
+            this.usageWindowsLoading = false;
+        },
+
+        windowBars() {
+            if (!this.usageWindows?.windows) return [];
+            const wins = this.usageWindows.windows;
+            const maxCost = Math.max(...wins.map(w => w.cost), 0.01);
+            return wins.map(w => ({
+                start: w.start,
+                pct: Math.max((w.cost / maxCost) * 100, w.cost > 0 ? 2 : 0),
+                cost: w.cost,
+                sessions: w.sessions,
+                isCurrent: w.current || false,
+                label: new Date(w.start).toLocaleDateString('en', { weekday: 'short', hour: '2-digit', hour12: false }) + '-' + new Date(w.end).toLocaleTimeString('en', { hour: '2-digit', hour12: false })
+            }));
+        },
+
+        weekBars() {
+            if (!this.usageWindows?.weeks) return [];
+            const weeks = this.usageWindows.weeks;
+            const maxCost = Math.max(...weeks.map(w => w.cost), 0.01);
+            return weeks.map((w, i) => ({
+                weekStart: w.start,
+                pct: Math.max((w.cost / maxCost) * 100, w.cost > 0 ? 3 : 0),
+                cost: w.cost,
+                sessions: w.sessions,
+                avgDaily: w.avgDaily || 0,
+                isCurrent: i === weeks.length - 1,
+                weekLabel: new Date(w.start).toLocaleDateString('en', { month: 'short', day: 'numeric' })
+            }));
+        },
+
+        timeUntilWindowReset() {
+            if (!this.usageWindows?.currentWindow) return '';
+            const end = new Date(this.usageWindows.currentWindow.end);
+            const now = new Date();
+            const diff = end - now;
+            if (diff <= 0) return 'now';
+            const h = Math.floor(diff / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            return h > 0 ? `${h}h ${m}m` : `${m}m`;
         },
 
         async loadStatus() {
@@ -3855,22 +3388,6 @@ function app() {
             }, 5000);
         },
 
-        async shareNote() {
-            if (!this.selectedNote) return;
-            this.noteShareMsg = 'Sharing…';
-            try {
-                const r = await fetch(`/api/share/note/${this.selectedNote.path}`, {
-                    method: 'POST'
-                });
-                const data = await r.json();
-                if (!r.ok) throw new Error(data.error);
-                await navigator.clipboard.writeText(data.url);
-                this.noteShareMsg = 'Link copied!';
-            } catch (e) {
-                this.noteShareMsg = e.message;
-            }
-            setTimeout(() => this.noteShareMsg = '', 5000);
-        },
 
         async sharePlan(filename) {
             this.planShareMsg = 'Sharing…';
@@ -3888,379 +3405,9 @@ function app() {
             setTimeout(() => this.planShareMsg = '', 5000);
         },
 
-        async openNewNote() {
-            this.noteNewTitle = '';
-            this.noteNewBody = '';
-            this.noteNewTags = '';
-            this.noteNewFolder = this.noteFolderPath;
-            this.noteFromClipboard = false;
-            this.noteCreating = true;
-            try {
-                const text = await navigator.clipboard.readText();
-                if (text && text.trim().length > 0) {
-                    this.noteNewBody = text.trim();
-                    this.noteFromClipboard = true;
-                }
-            } catch (e) {
-                /* clipboard access denied or empty */ }
-        },
-
-        promoteScratch() {
-            this.noteNewTitle = '';
-            this.noteNewBody = this.scratchContent;
-            this.noteFromClipboard = false;
-            this.scratchActive = false;
-            this.noteCreating = true;
-        },
-
-        async loadPersonalNotes() {
-            if (this.personalNotesLoading) return;
-            this.personalNotesLoading = true;
-            const [notes, status, folders] = await Promise.all([
-                fetch('/api/notes').then(r => r.json()).catch(() => []),
-                fetch('/api/notes/claude-md-status').then(r => r.json()).catch(() => ({})),
-                fetch('/api/notes/folders').then(r => r.json()).catch(() => []),
-            ]);
-            this.personalNotes = notes;
-            this.noteClaudeInstalled = status.installed ?? null;
-            this.noteFolders = Array.isArray(folders) ? folders : [];
-            this.personalNotesLoading = false;
-        },
-
-        async checkNoteClaudeStatus() {
-            const s = await fetch('/api/notes/claude-md-status').then(r => r.json()).catch(() => ({}));
-            this.noteClaudeInstalled = s.installed ?? null;
-        },
-
-        async setupClaudeNotes() {
-            this.noteSetupMsg = 'Installing…';
-            try {
-                const r = await fetch('/api/notes/setup-claude', {
-                    method: 'POST'
-                });
-                const d = await r.json();
-                this.noteClaudeInstalled = true;
-                this.noteSetupMsg = d.alreadyInstalled ? 'Already installed' : 'Installed!';
-            } catch (e) {
-                this.noteSetupMsg = 'Error: ' + e.message;
-            }
-            setTimeout(() => this.noteSetupMsg = '', 3000);
-        },
-
-        async createPersonalNote() {
-            if (!this.noteNewTitle.trim()) return;
-            this.noteSaving = true;
-            try {
-                const note = await fetch('/api/notes', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        title: this.noteNewTitle,
-                        content: this.noteNewBody,
-                        tags: this.noteNewTags ? this.noteNewTags.split(',').map(t => t.trim()).filter(Boolean) : [],
-                        folder: this.noteNewFolder
-                    }),
-                }).then(r => r.json());
-                this.personalNotes.unshift(note);
-                this.selectedNote = note;
-                this.noteCreating = false;
-                this.noteNewTitle = '';
-                this.noteNewBody = '';
-                this.noteNewTags = '';
-                this.noteEditing = false;
-            } catch (e) {
-                this.noteMsg = 'Error: ' + e.message;
-            }
-            this.noteSaving = false;
-        },
-
-        async savePersonalNote() {
-            if (!this.selectedNote) return;
-            this.noteSaving = true;
-            this.noteMsg = '';
-            try {
-                const updated = await fetch(`/api/notes/${this.selectedNote.path}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        title: this.noteTitleDraft,
-                        content: this.noteBodyDraft,
-                        tags: this.noteTagsDraft.split(',').map(t => t.trim()).filter(Boolean)
-                    }),
-                }).then(r => r.json());
-                const idx = this.personalNotes.findIndex(n => n.filename === this.selectedNote.filename);
-                if (idx !== -1) this.personalNotes[idx] = updated;
-                this.selectedNote = updated;
-                this.noteEditing = false;
-                this.noteMsg = 'Saved';
-                setTimeout(() => this.noteMsg = '', 2000);
-            } catch (e) {
-                this.noteMsg = 'Error: ' + e.message;
-            }
-            this.noteSaving = false;
-        },
-
-        async deletePersonalNote() {
-            if (!this.selectedNote || !confirm(`Delete "${this.selectedNote.title}"?`)) return;
-            await fetch(`/api/notes/${this.selectedNote.path}`, {
-                method: 'DELETE'
-            });
-            this.personalNotes = this.personalNotes.filter(n => n.filename !== this.selectedNote.filename);
-            this.selectedNote = null;
-            this.noteEditing = false;
-        },
-
-        async togglePinNote() {
-            if (!this.selectedNote) return;
-            const newPinned = !this.selectedNote.pinned;
-            const updated = await fetch(`/api/notes/${this.selectedNote.path}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    pinned: newPinned
-                }),
-            }).then(r => r.json());
-            if (updated.error) {
-                alert(updated.error);
-                return;
-            }
-            const idx = this.personalNotes.findIndex(n => n.path === this.selectedNote.path);
-            if (idx !== -1) this.personalNotes.splice(idx, 1, updated);
-            this.selectedNote = updated;
-        },
 
 
-        async movePersonalNote(targetFolder) {
-            if (!this.selectedNote || targetFolder === '__current__') return;
-            const currentFolder = this.selectedNote.folder ?? '';
-            if (targetFolder === currentFolder) return;
-            const updated = await fetch(`/api/notes/${this.selectedNote.path}/move`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    folder: targetFolder
-                }),
-            }).then(r => r.json());
-            if (updated.error) {
-                alert(updated.error);
-                return;
-            }
-            const idx = this.personalNotes.findIndex(n => n.path === this.selectedNote.path);
-            if (idx !== -1) this.personalNotes.splice(idx, 1, updated);
-            this.selectedNote = updated;
-            this.noteFolderPath = targetFolder;
-            window.location.hash = `#/note/${updated.path}`;
-        },
 
-        async snapshotSession() {
-            if (!this.selectedSession || this.snapshottingSession) return;
-            this.snapshottingSession = true;
-            try {
-                const {
-                    projectDir,
-                    sessionId
-                } = this.selectedSession;
-                const note = await fetch(`/api/sessions/${projectDir}/${sessionId}/snapshot`, {
-                    method: 'POST',
-                }).then(r => r.json());
-                if (note.error) {
-                    alert(note.error);
-                    return;
-                }
-                if (!this.personalNotes.find(n => n.path === note.path)) this.personalNotes.unshift(note);
-                this.selectedNote = note;
-                this.noteEditing = false;
-                this.view = 'notes';
-                this.selectedSession = null;
-            } finally {
-                this.snapshottingSession = false;
-            }
-        },
-
-        async loadToday() {
-            this.todayLoading = true;
-            this.todayData = await fetch('/api/today').then(r => r.json()).catch(() => null);
-            this.upcomingTasks = await fetch('/api/today/upcoming').then(r => r.json()).catch(() => []);
-            this.todayLoading = false;
-        },
-
-        saveToday() {
-            clearTimeout(this.todaySaveTimer);
-            this.todaySaveTimer = setTimeout(async () => {
-                if (!this.todayData) return;
-                await fetch('/api/today', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        context: this.todayData.context,
-                        tasks: this.todayData.tasks
-                    }),
-                });
-            }, 400);
-        },
-
-        addTodayTask() {
-            const text = this.todayNewTask.trim();
-            if (!text) return;
-            if (!this.todayData) return;
-            this.todayData.tasks.push({
-                id: Math.random().toString(36).slice(2),
-                text,
-                done: false,
-                carriedOver: false,
-                createdAt: new Date().toISOString(),
-            });
-            this.todayNewTask = '';
-            this.saveToday();
-        },
-
-        addNoteTask(text, note) {
-            if (!text || !this.todayData) return;
-            this.todayData.tasks.push({
-                id: Math.random().toString(36).slice(2),
-                text: text.slice(0, 200),
-                done: false,
-                carriedOver: false,
-                createdAt: new Date().toISOString(),
-                noteRef: note ? {
-                    title: note.title,
-                    path: note.path
-                } : undefined,
-            });
-            this.saveToday();
-            // Toast
-            const el = document.createElement('div');
-            el.className = 'note-task-toast';
-            el.textContent = '✓ Added to Today';
-            document.body.appendChild(el);
-            setTimeout(() => el.remove(), 2000);
-        },
-
-        toggleTodayTask(id) {
-            const task = this.todayData?.tasks.find(t => t.id === id);
-            if (task) {
-                task.done = !task.done;
-                this.saveToday();
-            }
-        },
-
-        taskAgeDays(task) {
-            if (!task.createdAt) return 0;
-            const diff = Date.now() - new Date(task.createdAt).getTime();
-            return Math.floor(diff / 86400000);
-        },
-
-        formatUpcomingDate(dateStr) {
-            const d = new Date(dateStr + 'T12:00:00');
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const diff = Math.round((d - today) / 86400000);
-            if (diff === 1) return 'Tomorrow';
-            if (diff === 2) return 'Day after tomorrow';
-            return d.toLocaleDateString('en-GB', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'short'
-            });
-        },
-
-        async pullTask(taskId, fromDate) {
-            await fetch('/api/today/pull', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    taskId,
-                    fromDate
-                })
-            });
-            this.upcomingTasks = this.upcomingTasks
-                .map(g => g.date === fromDate ? {
-                    ...g,
-                    tasks: g.tasks.filter(t => t.id !== taskId)
-                } : g)
-                .filter(g => g.tasks.length > 0);
-            await this.loadToday();
-        },
-
-
-        async postponeTask(taskId, days) {
-            const task = this.todayData?.tasks.find(t => t.id === taskId);
-            const target = new Date();
-            target.setDate(target.getDate() + days);
-            const targetDate = target.toISOString().slice(0, 10);
-            await fetch('/api/today/postpone', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    taskId,
-                    targetDate
-                })
-            });
-            this.todayData.tasks = this.todayData.tasks.filter(t => t.id !== taskId);
-            this.postponeMenuTask = '';
-            this.upcomingTasks = await fetch('/api/today/upcoming').then(r => r.json()).catch(() => []);
-        },
-
-        deleteTodayTask(id) {
-            if (!this.todayData) return;
-            this.todayData.tasks = this.todayData.tasks.filter(t => t.id !== id);
-            this.saveToday();
-        },
-
-        startEditTask(task) {
-            this.editingTaskId = task.id;
-            this.taskEditText = task.text;
-            this.$nextTick(() => {
-                const el = document.getElementById('task-edit-' + task.id);
-                if (el) {
-                    el.focus();
-                    el.select();
-                }
-            });
-        },
-
-        commitEditTask(id) {
-            const task = this.todayData?.tasks.find(t => t.id === id);
-            const text = this.taskEditText.trim();
-            if (task && text) {
-                task.text = text;
-                this.saveToday();
-            }
-            this.editingTaskId = '';
-            this.taskEditText = '';
-        },
-
-        copyTodayForClaude() {
-            if (!this.todayData) return;
-            const date = this.todayData.date;
-            const ctx = this.todayData.context ? `\nContext: ${this.todayData.context}` : '';
-            const carried = this.todayData.tasks.filter(t => t.carriedOver && !t.done);
-            const fresh = this.todayData.tasks.filter(t => !t.carriedOver && !t.done);
-            const done = this.todayData.tasks.filter(t => t.done);
-            let text = `## My day — ${date}${ctx}\n`;
-            if (carried.length) text += `\n### Carried over from yesterday:\n${carried.map(t => `- [ ] ${t.text}`).join('\n')}\n`;
-            if (fresh.length) text += `\n### Today's tasks:\n${fresh.map(t => `- [ ] ${t.text}`).join('\n')}\n`;
-            if (done.length) text += `\n### Already done:\n${done.map(t => `- [x] ${t.text}`).join('\n')}\n`;
-            text += `\nPlease prioritize my pending tasks given the context and suggest a realistic order for today.`;
-            navigator.clipboard.writeText(text).then(() => {
-                this.todayCopied = true;
-                setTimeout(() => this.todayCopied = false, 2000);
-            });
-        },
 
         async saveSettings() {
             this.settingsSaving = true;
