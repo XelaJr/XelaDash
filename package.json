@@ -1,0 +1,59 @@
+{
+  "name": "claude-home",
+  "version": "1.8.3",
+  "description": "Web dashboard for Claude Code — browse sessions, manage skills, hooks, commands, and agents",
+  "main": "server.js",
+  "bin": {
+    "claude-home": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "server.js",
+    "public/",
+    "marketplace.default.json",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node server.js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZenekeZene/claude-home.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "sessions",
+    "dashboard",
+    "cli",
+    "skills",
+    "agents"
+  ],
+  "author": "ZenekeZene",
+  "license": "MIT",
+  "dependencies": {
+    "@tanstack/react-query": "^5.96.2",
+    "express": "^4.18.2",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "jsdom": "^29.0.2",
+    "vitest": "^3.2.4"
+  }
+}

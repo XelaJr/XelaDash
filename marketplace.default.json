@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "id": "anthropic",
+      "name": "Anthropic Official",
+      "owner": "anthropics",
+      "repo": "skills",
+      "branch": "main",
+      "skillsPath": "skills",
+      "token": ""
+    },
+    {
+      "id": "addyosmani-agent-skills",
+      "name": "Addy Osmani — Engineering Discipline",
+      "owner": "addyosmani",
+      "repo": "agent-skills",
+      "branch": "main",
+      "skillsPath": "skills",
+      "token": ""
+    }
+  ]
+}
