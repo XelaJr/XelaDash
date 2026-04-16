@@ -7,11 +7,11 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- script extracted -->
   <!-- script extracted -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
   <!-- script extracted -->
 
   <!-- style extracted -->
@@ -432,7 +432,7 @@
                           <template x-for="f in projectGitStatus.files" :key="f.path">
                             <div style="display:flex;align-items:baseline;gap:8px;font-size:12.5px;padding:4px 8px;border-radius:4px;background:var(--surface);">
                               <span style="font-family:'SF Mono','Fira Code',monospace;font-size:11px;font-weight:700;flex-shrink:0;min-width:18px;"
-                                    :style="f.status==='M'?'color:#e6a817':f.status==='A'?'color:#3cad3c':f.status==='D'?'color:var(--red)':f.status==='??'?'color:var(--ink-3)':'color:var(--ink-2)'"
+                                    :style="f.status==='M'?'color:#ffd000':f.status==='A'?'color:#00ff88':f.status==='D'?'color:var(--red)':f.status==='??'?'color:var(--ink-3)':'color:var(--ink-2)'"
                                     x-text="f.status"></span>
                               <span style="font-family:'SF Mono','Fira Code',monospace;color:var(--ink-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="f.path"></span>
                             </div>
@@ -596,10 +596,10 @@
                 <div class="heatmap-legend">
                   <span>Less</span>
                   <div class="legend-cell" style="background:var(--canvas);border:1px solid var(--rule)"></div>
-                  <div class="legend-cell" style="background:#F5BFC7"></div>
-                  <div class="legend-cell" style="background:#E8728A"></div>
-                  <div class="legend-cell" style="background:#D4294A"></div>
-                  <div class="legend-cell" style="background:var(--red)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.15)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.35)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.55)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.8)"></div>
                   <span>More</span>
                 </div>
               </div>
@@ -644,7 +644,7 @@
                     <span x-text="usageWindows.currentWeek.sessions"></span> sessions ·
                     $<span x-text="(usageWindows.currentWeek.avgDaily || 0).toFixed(2)"></span>/day avg
                     <template x-if="usageWindows.currentWeek.deltaVsPrev !== null && usageWindows.currentWeek.deltaVsPrev !== undefined">
-                      <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:#e55' : 'color:#5b5'"
+                      <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:var(--red)' : 'color:var(--green)'"
                         x-text="(usageWindows.currentWeek.deltaVsPrev > 0 ? ' +' : ' ') + usageWindows.currentWeek.deltaVsPrev + '%'">
                       </span>
                     </template>
@@ -777,7 +777,7 @@
                   </div>
                   <template x-if="projectCost(proj.dirName) !== null && insights?.byProject?.length">
                     <div style="margin-top:5px;height:3px;background:var(--canvas);border-radius:2px;overflow:hidden">
-                      <div style="height:100%;background:var(--red);border-radius:2px;transition:width 0.3s" :style="{ width: Math.round(projectCost(proj.dirName) / insights.byProject[0].cost * 100) + '%' }"></div>
+                      <div style="height:100%;background:var(--blue);border-radius:2px;transition:width 0.3s" :style="{ width: Math.round(projectCost(proj.dirName) / insights.byProject[0].cost * 100) + '%' }"></div>
                     </div>
                   </template>
                   <div style="font-size:10.5px;color:var(--ink-4);margin-top:1px" x-text="proj.lastActive ? formatDate(proj.lastActive) : ''"></div>
@@ -1303,7 +1303,7 @@
             <span class="live-badge"><span class="live-dot" style="margin-right:2px"></span>Live</span>
 
             <!-- Token counter (acumulado de la sesión, se refresca cada 4s) -->
-            <span style="display:flex;align-items:center;gap:6px;color:var(--ink-2);padding-right:12px;border-right:1px solid #F4D0D0">
+            <span style="display:flex;align-items:center;gap:6px;color:var(--ink-2);padding-right:12px;border-right:1px solid rgba(255, 51, 102, 0.2)">
               <span style="color:var(--ink-3)">In</span>
               <strong x-text="fmtNum(sessionDetail?.tokens?.input || 0)"></strong>
               <span style="color:var(--ink-3)">Out</span>
@@ -1311,7 +1311,7 @@
             </span>
 
             <!-- Cost ticker -->
-            <span style="display:flex;align-items:center;gap:4px;padding-right:12px;border-right:1px solid #F4D0D0">
+            <span style="display:flex;align-items:center;gap:4px;padding-right:12px;border-right:1px solid rgba(255, 51, 102, 0.2)">
               <strong style="font-family:'SF Mono','Fira Code',monospace;color:var(--ink)" x-text="fmtCost(sessionDetail?.cost || 0)"></strong>
               <span style="color:var(--red);font-size:11px;font-weight:700">↑</span>
             </span>
@@ -1956,10 +1956,10 @@
                 <div class="heatmap-legend">
                   <span>Less</span>
                   <div class="legend-cell" style="background:var(--canvas);border:1px solid var(--rule)"></div>
-                  <div class="legend-cell" style="background:#F5BFC7"></div>
-                  <div class="legend-cell" style="background:#E8728A"></div>
-                  <div class="legend-cell" style="background:#D4294A"></div>
-                  <div class="legend-cell" style="background:var(--red)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.15)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.35)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.55)"></div>
+                  <div class="legend-cell" style="background:rgba(0, 212, 255, 0.8)"></div>
                   <span>More</span>
                 </div>
               </div>
@@ -2003,7 +2003,7 @@
                       <span x-text="usageWindows.currentWeek.sessions"></span> sessions ·
                       $<span x-text="(usageWindows.currentWeek.avgDaily || 0).toFixed(2)"></span>/day avg
                       <template x-if="usageWindows.currentWeek.deltaVsPrev !== null && usageWindows.currentWeek.deltaVsPrev !== undefined">
-                        <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:#e55' : 'color:#5b5'"
+                        <span :style="usageWindows.currentWeek.deltaVsPrev > 0 ? 'color:var(--red)' : 'color:var(--green)'"
                           x-text="(usageWindows.currentWeek.deltaVsPrev > 0 ? ' +' : ' ') + usageWindows.currentWeek.deltaVsPrev + '%'">
                         </span>
                       </template>
@@ -4457,7 +4457,7 @@ Los **agents**, **slash commands** (\`/spec\`, \`/plan\`, \`/build\`, \`/test\`,
                           <template x-if="hookTest.running"><span style="font-size:10px;color:var(--ink-3)">running…</span></template>
                           <template x-if="!hookTest.running && hookTest.result">
                             <span style="font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px"
-                              :style="hookTest.result.exitCode===0 ? 'background:#d4edda;color:#1a7c3e' : hookTest.result.exitCode===2 ? 'background:#fff3cd;color:#856404' : 'background:#f8d7da;color:#c8102e'"
+                              :style="hookTest.result.exitCode===0 ? 'background:rgba(0, 255, 136, 0.1);color:#00ff88' : hookTest.result.exitCode===2 ? 'background:rgba(255, 208, 0, 0.1);color:#ffd000' : 'background:rgba(255, 51, 102, 0.1);color:#ff3366'"
                               x-text="'exit ' + hookTest.result.exitCode + (hookTest.result.exitCode===2?' — blocked':'')"></span>
                             <span style="font-size:10px;color:var(--ink-4)" x-text="hookTest.result.duration + 'ms'"></span>
                           </template>

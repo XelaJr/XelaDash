@@ -83,23 +83,15 @@ Discovers skills from GitHub repos via Trees API. Sources configured in `DATA_DI
 
 This project maintains a live knowledge graph at `graphify-out/`. It maps all code, assets, and documentation into a navigable graph with community detection and relationship tracking.
 
-### MANDATORY: Always consult the graph for context
+### MANDATORY: Use the /graphify skill for context
 
-**Before ANY code modification or architecture question, you MUST:**
-1. Read `graphify-out/GRAPH_REPORT.md` — god nodes, communities, surprising connections
-2. Use `/graphify query "<question>"` for cross-cutting questions that span multiple files
-3. Use `/graphify path "ConceptA" "ConceptB"` to trace dependency chains
-4. Use `/graphify explain "NodeName"` to understand a single concept's connections
+**Before ANY code modification or architecture question, you MUST use the graphify skill:**
+- `/graphify query "<question>"` — for cross-cutting questions that span multiple files
+- `/graphify path "ConceptA" "ConceptB"` — to trace dependency chains between concepts
+- `/graphify explain "NodeName"` — to understand a single node's connections
 
-The graph gives you the full picture of how the codebase is connected. Use it to avoid blind edits.
+**Use the Skill tool to invoke these commands. Do NOT try to read graph files manually — use the skill.**
 
 ### Graph auto-updates — don't rebuild manually
 
-Git hooks (post-commit, post-checkout) handle graph rebuilds automatically. You do NOT need to run rebuild commands. Just commit your changes and the graph updates itself.
-
-### Graph outputs
-
-- `graphify-out/GRAPH_REPORT.md` — audit report with god nodes, communities, gaps
-- `graphify-out/graph.html` — interactive visualization (open in browser)
-- `graphify-out/graph.json` — raw graph data
-- `graphify-out/obsidian/` — Obsidian vault (open as vault, use Graph View for visual navigation)
+Git hooks (post-commit, post-checkout) handle graph rebuilds automatically. You do NOT need to run rebuild commands.
