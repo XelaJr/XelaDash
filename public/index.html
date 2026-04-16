@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>xeladash</title>
+  <title>XelaDash</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,12 +26,7 @@
     <div class="nav-resize-handle" :class="{ dragging: _navDragging }" @mousedown.prevent="startNavResize($event)"></div>
     <div class="brand">
       <div class="brand-mark" @click="if(navWidth <= 56) toggleNav()" :style="navWidth <= 56 ? 'cursor:pointer' : ''">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
-          <rect x="0" y="0" width="5" height="5"/>
-          <rect x="7" y="0" width="5" height="5"/>
-          <rect x="0" y="7" width="5" height="5"/>
-          <circle cx="9.5" cy="9.5" r="2.5"/>
-        </svg>
+        <img src="/assets/logo.svg" width="28" height="28" alt="XelaDash" style="display:block" />
       </div>
       <span class="nav-text" style="display:flex;flex-direction:column;line-height:1">
         <span class="brand-name">XELADASH</span>
