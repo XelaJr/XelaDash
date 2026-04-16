@@ -35,7 +35,7 @@ bin/cli.js → port check → require('./server.js').startServer(port) → Expre
 
 ```
 CLAUDE_DIR     = process.env.CLAUDE_CONFIG_DIR || ~/.claude
-DATA_DIR       = CLAUDE_DIR/claude-home          # Notes, todos, marketplace config
+DATA_DIR       = CLAUDE_DIR/xeladash             # Notes, todos, marketplace config
 PROJECTS_DIR   = CLAUDE_DIR/projects             # Session data per project
 ```
 

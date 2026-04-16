@@ -31,7 +31,7 @@ const noOpen = args.includes('--no-open');
 
 // ─── Config directory + data dir ─────────────────────────────────────────────
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-const DATA_DIR = path.join(CLAUDE_DIR, 'claude-home');
+const DATA_DIR = path.join(CLAUDE_DIR, 'xeladash');
 
 try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, {
@@ -52,11 +52,11 @@ if (args.includes('--version') || args.includes('-v')) {
 
 if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-  claude-home v${pkg.version}
+  xeladash v${pkg.version}
 
   Usage:
-    claude-home [options]
-    claude-home setup-hook
+    xeladash [options]
+    xeladash setup-hook
 
   Options:
     --port, -p <n>      Port to use (default: 3141)
@@ -67,9 +67,9 @@ if (args.includes('--help') || args.includes('-h')) {
     --help, -h          Show help
 
   Commands:
-    setup-hook       Add SessionStart hook and /claude-home slash command
-    remove-hook      Remove SessionStart hook and /claude-home slash command
-    stop             Stop the running claude-home server
+    setup-hook       Add SessionStart hook and /xeladash slash command
+    remove-hook      Remove SessionStart hook and /xeladash slash command
+    stop             Stop the running xeladash server
   `);
     process.exit(0);
 }
@@ -84,9 +84,9 @@ if (subcommand === 'stop') {
         execSync(`lsof -ti:${port} | xargs kill -9`, {
             stdio: 'ignore'
         });
-        console.log(`✓ claude-home stopped`);
+        console.log(`✓ XelaDash stopped`);
     } catch {
-        console.log(`No claude-home process found on port ${port}`);
+        console.log(`No XelaDash process found on port ${port}`);
     }
     process.exit(0);
 }
@@ -114,7 +114,7 @@ promptSetupHookIfNeeded().then(() => {
             } = require('../server.js');
             startServer(port);
         } else {
-            console.log(`claude-home already running at http://localhost:${port}`);
+            console.log(`XelaDash already running at http://localhost:${port}`);
         }
         if (!noOpen) openBrowser(`http://localhost:${port}`);
     });
@@ -133,9 +133,9 @@ function checkForUpdates() {
         /* no cache yet */ }
 
     const https = require('https');
-    https.get(`https://registry.npmjs.org/claude-home/latest`, {
+    https.get(`https://registry.npmjs.org/xeladash/latest`, {
         headers: {
-            'User-Agent': 'claude-home'
+            'User-Agent': 'xeladash'
         }
     }, res => {
         let data = '';
@@ -149,7 +149,7 @@ function checkForUpdates() {
                 }), 'utf8');
                 if (latest && latest !== pkg.version && isNewer(latest, pkg.version)) {
                     console.log(`\n  Update available: ${pkg.version} → ${latest}`);
-                    console.log(`  Run: npm install -g claude-home@latest\n`);
+                    console.log(`  Run: npm install -g xeladash@latest\n`);
                 }
             } catch {
                 /* ignore parse errors */ }
@@ -187,7 +187,7 @@ function promptSetupHookIfNeeded() {
     if (fs.existsSync(sentinelPath)) return Promise.resolve();
     try {
         const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        const already = s.hooks?.SessionStart?.some(e => e.hooks?.some(h => h.command?.includes('claude-home')));
+        const already = s.hooks?.SessionStart?.some(e => e.hooks?.some(h => h.command?.includes('xeladash')));
         if (already) {
             fs.writeFileSync(sentinelPath, '1');
             return Promise.resolve();
@@ -196,14 +196,14 @@ function promptSetupHookIfNeeded() {
         /* settings.json may not exist */ }
 
     return new Promise(resolve => {
-        process.stdout.write('\n  Auto-start claude-home when Claude Code opens? (y/n) ');
+        process.stdout.write('\n  Auto-start XelaDash when Claude Code opens? (y/n) ');
         process.stdin.setEncoding('utf8');
         process.stdin.once('data', d => {
             process.stdin.pause();
             if (d.trim().toLowerCase() === 'y') {
                 setupHook();
             } else {
-                console.log('  Skipped. Run `claude-home setup-hook` anytime to enable it.\n');
+                console.log('  Skipped. Run `xeladash setup-hook` anytime to enable it.\n');
             }
             fs.writeFileSync(sentinelPath, '1');
             resolve();
@@ -223,8 +223,8 @@ function openBrowser(url) {
 function setupHook() {
     const settingsPath = path.join(CLAUDE_DIR, 'settings.json');
     const commandsDir = path.join(CLAUDE_DIR, 'commands');
-    const commandPath = path.join(commandsDir, 'claude-home.md');
-    const hookCommand = `lsof -ti:${port} >/dev/null 2>&1 || (claude-home --no-open &>/dev/null &)`;
+    const commandPath = path.join(commandsDir, 'xeladash.md');
+    const hookCommand = `lsof -ti:${port} >/dev/null 2>&1 || (xeladash --no-open &>/dev/null &)`;
 
     // Add SessionStart hook to settings.json
     let settings = {};
@@ -236,7 +236,7 @@ function setupHook() {
     if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
 
     const alreadyExists = settings.hooks.SessionStart.some(entry =>
-        entry.hooks?.some(h => h.command?.includes('claude-home'))
+        entry.hooks?.some(h => h.command?.includes('xeladash'))
     );
 
     if (!alreadyExists) {
@@ -253,7 +253,7 @@ function setupHook() {
         console.log(`  SessionStart hook already present — skipped`);
     }
 
-    // Create /claude-home slash command
+    // Create /xeladash slash command
     if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, {
         recursive: true
     });
@@ -266,7 +266,7 @@ function setupHook() {
             'Start the Claude Manager web dashboard if not already running, then open it in the browser.',
             '',
             '```bash',
-            `lsof -ti:${port} >/dev/null 2>&1 && echo "Claude Manager running at http://localhost:${port}" || (claude-home &)`,
+            `lsof -ti:${port} >/dev/null 2>&1 && echo "Claude Manager running at http://localhost:${port}" || (xeladash &)`,
             '```',
         ].join('\n'), 'utf8');
         console.log(`✓ Slash command created at ${commandPath}`);
@@ -279,7 +279,7 @@ function setupHook() {
 
 function removeHook() {
     const settingsPath = path.join(CLAUDE_DIR, 'settings.json');
-    const commandPath = path.join(CLAUDE_DIR, 'commands', 'claude-home.md');
+    const commandPath = path.join(CLAUDE_DIR, 'commands', 'xeladash.md');
     const sentinelPath = path.join(DATA_DIR, '.hook-prompted');
 
     // Remove SessionStart hook
@@ -289,7 +289,7 @@ function removeHook() {
         if (settings.hooks?.SessionStart) {
             const before = settings.hooks.SessionStart.length;
             settings.hooks.SessionStart = settings.hooks.SessionStart.filter(
-                e => !e.hooks?.some(h => h.command?.includes('claude-home'))
+                e => !e.hooks?.some(h => h.command?.includes('xeladash'))
             );
             if (settings.hooks.SessionStart.length < before) {
                 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
@@ -297,7 +297,7 @@ function removeHook() {
                 removed = true;
             }
         }
-        if (!removed) console.log('  No claude-home hook found — skipped');
+        if (!removed) console.log('  No XelaDash hook found — skipped');
     } catch {
         console.log('  Could not read settings.json — skipped');
     }

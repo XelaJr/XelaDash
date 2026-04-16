@@ -5162,7 +5162,7 @@ function app() {
 
         isAutoStartEnabled() {
             const hooks = this.configHooks();
-            return hooks.some(h => h.event === 'SessionStart' && h.command?.includes('claude-home'));
+            return hooks.some(h => h.event === 'SessionStart' && h.command?.includes('xeladash'));
         },
 
         async toggleAutoStart(enable) {
@@ -5177,11 +5177,11 @@ function app() {
                         event: 'SessionStart',
                         matcher: '',
                         type: 'command',
-                        command: `lsof -ti:3141 >/dev/null 2>&1 || (claude-home --no-open &>/dev/null &)`,
+                        command: `lsof -ti:3141 >/dev/null 2>&1 || (xeladash --no-open &>/dev/null &)`,
                     }),
                 });
             } else {
-                const hook = this.configHooks().find(h => h.event === 'SessionStart' && h.command?.includes('claude-home'));
+                const hook = this.configHooks().find(h => h.event === 'SessionStart' && h.command?.includes('xeladash'));
                 if (hook) await this.deleteHook(hook);
             }
             await this.loadConfig();

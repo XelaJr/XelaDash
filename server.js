@@ -7,7 +7,7 @@ const https = require('https');
 
 // ─── Config directory (supports CLAUDE_CONFIG_DIR override) ──────────────────
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-const DATA_DIR = path.join(CLAUDE_DIR, 'claude-home');
+const DATA_DIR = path.join(CLAUDE_DIR, 'xeladash');
 const CLAUDE_SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 
@@ -35,7 +35,7 @@ function ensureDataDir() {
 ensureDataDir();
 
 // ─── Claude Code permissions (auto-allow notes/todos writes) ──────────────────
-const CLAUDE_HOME_PERMISSIONS = [
+const XELADASH_PERMISSIONS = [
     `Write(${tildePrefix(path.join(DATA_DIR, 'notes', '*'))})`,
     `Write(${tildePrefix(path.join(DATA_DIR, 'todos', '*'))})`,
 ];
@@ -53,7 +53,7 @@ function ensureClaudePermissions() {
         if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
 
         const before = settings.permissions.allow.length;
-        for (const perm of CLAUDE_HOME_PERMISSIONS) {
+        for (const perm of XELADASH_PERMISSIONS) {
             if (!settings.permissions.allow.includes(perm)) settings.permissions.allow.push(perm);
         }
         if (settings.permissions.allow.length !== before) {
@@ -103,7 +103,7 @@ function getMarketplaceSources() {
 function fetchRemote(url, token) {
     return new Promise((resolve, reject) => {
         const headers = {
-            'User-Agent': 'claude-home/1.0'
+            'User-Agent': 'xeladash/1.0'
         };
         if (token) headers['Authorization'] = `token ${token}`;
         const req = https.get(url, {
@@ -790,7 +790,7 @@ app.post('/api/sessions/:project/:sessionId/inject', async (req, res) => {
     const claudeLocalPath = path.join(projectPath, '.claude', 'CLAUDE.local.md');
     const timestamp = new Date().toISOString();
     const persistentFlag = persistent ? ' persistent' : '';
-    const block = `\n\n<!-- claude-home directive [${timestamp}]${persistentFlag} -->\nIMPORTANT: ${directive.trim()}\n<!-- /claude-home directive -->`;
+    const block = `\n\n<!-- xeladash directive [${timestamp}]${persistentFlag} -->\nIMPORTANT: ${directive.trim()}\n<!-- /xeladash directive -->`;
 
     try {
         const existing = fs.existsSync(claudeLocalPath) ? fs.readFileSync(claudeLocalPath, 'utf8') : '';
@@ -823,7 +823,7 @@ app.get('/api/sessions/:project/:sessionId/directives', async (req, res) => {
     });
 
     const content = fs.readFileSync(claudeLocalPath, 'utf8');
-    const regex = /<!-- claude-home directive \[([^\]]+)\]([^>]*) -->\nIMPORTANT: ([\s\S]*?)\n<!-- \/claude-home directive -->/g;
+    const regex = /<!-- xeladash directive \[([^\]]+)\]([^>]*) -->\nIMPORTANT: ([\s\S]*?)\n<!-- \/xeladash directive -->/g;
     const directives = [];
     let m;
     while ((m = regex.exec(content)) !== null) {
@@ -862,7 +862,7 @@ app.delete('/api/sessions/:project/:sessionId/directives', async (req, res) => {
 
     let content = fs.readFileSync(claudeLocalPath, 'utf8');
     const escaped = timestamp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\n\\n<!-- claude-home directive \\[${escaped}\\][^>]* -->\\nIMPORTANT: [\\s\\S]*?\\n<!-- /claude-home directive -->`, 'g');
+    const regex = new RegExp(`\\n\\n<!-- xeladash directive \\[${escaped}\\][^>]* -->\\nIMPORTANT: [\\s\\S]*?\\n<!-- /xeladash directive -->`, 'g');
     content = content.replace(regex, '');
     safeWrite(claudeLocalPath, content);
     res.json({
@@ -3603,7 +3603,7 @@ app.post('/api/config/hooks/enable', (req, res) => {
 
 // ─── Guardrail Dashboard ──────────────────────────────────────────────────────
 
-const GUARDRAIL_TAG = 'claude-home-guardrail';
+const GUARDRAIL_TAG = 'xeladash-guardrail';
 
 // Preset guardrail definitions
 const GUARDRAIL_PRESETS = {
@@ -4209,7 +4209,7 @@ app.post('/api/sessions/:project/:sessionId/snapshot', async (req, res) => {
     }
 });
 
-// ─── App settings (claude-home specific, not Claude's settings.json) ─────────
+// ─── App settings (xeladash specific, not Claude's settings.json) ─────────
 const APP_SETTINGS_FILE = path.join(DATA_DIR, 'app-settings.json');
 
 function readAppSettings() {
@@ -4282,7 +4282,7 @@ function postGist(token, description, filename, content) {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
-                'User-Agent': 'claude-home',
+                'User-Agent': 'xeladash',
                 'Accept': 'application/vnd.github+json',
                 'Content-Length': Buffer.byteLength(body),
             },
@@ -4469,7 +4469,7 @@ function notesClaudeMdSnippet() {
 ## Personal Notes
 
 When the user asks you to "save a note", "add to notes", "guarda esto como nota", or similar:
-1. Create a markdown file in \`${d}/claude-home/notes/\` with this exact format:
+1. Create a markdown file in \`${d}/xeladash/notes/\` with this exact format:
    - Filename: \`YYYY-MM-DD-short-slug.md\` (e.g. \`2026-03-31-bug-fix-auth.md\`)
    - Content:
      \`\`\`
@@ -4482,10 +4482,10 @@ When the user asks you to "save a note", "add to notes", "guarda esto como nota"
      <the content the user wants to save>
      \`\`\`
 2. **Folder**: Save in a subfolder when appropriate:
-   - Project-specific note → \`${d}/claude-home/notes/<basename-of-pwd>/\` (e.g. working in \`mono-genially\` → folder \`mono-genially\`)
-   - Global/cross-project note → root \`${d}/claude-home/notes/\`
+   - Project-specific note → \`${d}/xeladash/notes/<basename-of-pwd>/\` (e.g. working in \`mono-genially\` → folder \`mono-genially\`)
+   - Global/cross-project note → root \`${d}/xeladash/notes/\`
    - User-specified folder → use that folder name
-3. **Note linking**: If the note references concepts in other notes, use \`#slug\` syntax (\`2026-03-31-my-slug.md\` → \`#my-slug\`). Glob \`${d}/claude-home/notes/**/*.md\` to discover existing slugs.
+3. **Note linking**: If the note references concepts in other notes, use \`#slug\` syntax (\`2026-03-31-my-slug.md\` → \`#my-slug\`). Glob \`${d}/xeladash/notes/**/*.md\` to discover existing slugs.
 4. Use the Write tool to create the file (not Bash).
 5. Confirm with: "Saved to Notes: http://localhost:3141/#/note/<folder/filename or filename>"
 
@@ -4495,7 +4495,7 @@ The notes directory may not exist yet — the app creates it automatically on fi
 
 When the user asks to add a task "for today", "for tomorrow", "to review later", or similar:
 1. Determine the target date (today = current date, tomorrow = current date + 1 day)
-2. Read the existing file if it exists: \`${d}/claude-home/todos/YYYY-MM-DD.json\`
+2. Read the existing file if it exists: \`${d}/xeladash/todos/YYYY-MM-DD.json\`
 3. Use the Write tool to save the updated file with this format:
    \`\`\`json
    {
@@ -4548,7 +4548,7 @@ app.post('/api/notes/setup-claude', (req, res) => {
             const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
             if (!settings.permissions) settings.permissions = {};
             if (!settings.permissions.allow) settings.permissions.allow = [];
-            const rules = CLAUDE_HOME_PERMISSIONS;
+            const rules = XELADASH_PERMISSIONS;
             let changed = false;
             for (const rule of rules) {
                 if (!settings.permissions.allow.includes(rule)) {
@@ -5263,7 +5263,7 @@ app.delete('/api/webmd/:slug', (req, res) => {
 function startServer(port) {
     const p = port || PORT;
     return app.listen(p, () => {
-        console.log(`claude-home running at http://localhost:${p}`);
+        console.log(`xeladash running at http://localhost:${p}`);
     });
 }
 
