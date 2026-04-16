@@ -91,23 +91,25 @@ Before answering architecture, structure, or "how does X connect to Y" questions
 3. Use `/graphify path "ConceptA" "ConceptB"` to trace dependency chains
 4. Use `/graphify explain "NodeName"` to understand a single concept's connections
 
-### Keep the graph current
+### Keep the graph and vault current
 
-The graph auto-updates on git commits via a post-commit hook (code-only changes, no LLM needed).
+The graph and Obsidian vault auto-update on git commits and branch switches via post-commit/post-checkout hooks (code-only, no LLM needed).
 
 After modifying **code files** within a session (without committing yet), run:
 ```bash
 python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+python graphify-out/rebuild-vault.py
 ```
 
 After creating or modifying **non-code files** (docs, images, configs), run:
 ```
 /graphify --update
 ```
+Then regenerate the vault: `python graphify-out/rebuild-vault.py`
 
 ### When to rebuild fully
 
-Run `/graphify` (full pipeline) when:
+Run `/graphify` (full pipeline) followed by `/graphify` with `--obsidian` when:
 - Major refactors that change the architecture
 - New features spanning multiple files
 - The graph feels stale or incomplete (check `graphify-out/GRAPH_REPORT.md` "Knowledge Gaps" section)
@@ -115,5 +117,8 @@ Run `/graphify` (full pipeline) when:
 ### Graph outputs
 
 - `graphify-out/graph.html` — interactive visualization (open in browser)
-- `graphify-out/graph.json` — raw graph data (143 nodes, 218 edges, 16 communities)
+- `graphify-out/graph.json` — raw graph data
 - `graphify-out/GRAPH_REPORT.md` — audit report with god nodes, communities, gaps
+- `graphify-out/obsidian/` — Obsidian vault (open as vault, use Graph View for visual navigation)
+- `graphify-out/obsidian/graph.canvas` — Obsidian Canvas with communities as groups
+- `graphify-out/rebuild-vault.py` — script to regenerate vault from current graph.json

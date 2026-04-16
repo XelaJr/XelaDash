@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"graphify: File modified. After finishing your current task, rebuild the graph: for code files run python -c \\\"from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path(\\x27.\\x27))\\\" — for docs/configs run /graphify --update\"}}'"
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"graphify: File modified. After finishing your current task, rebuild graph + vault: for code run python -c \\\"from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path(\\x27.\\x27))\\\" then python graphify-out/rebuild-vault.py — for docs run /graphify --update then python graphify-out/rebuild-vault.py\"}}'"
           }
         ]
       }
